@@ -4,6 +4,10 @@ LAUNCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$LAUNCH_ROOT/scripts/lib/common.sh"
 require_root
 load_install_state
+if [[ "${AUTO_UPDATE:-0}" != "1" && "${1:-}" == "--automatic" ]]; then
+  log "Automatic updates are disabled."
+  exit 0
+fi
 REPO="${REPO_ROOT:?REPO_ROOT is not configured}"
 cd "$REPO"
 
