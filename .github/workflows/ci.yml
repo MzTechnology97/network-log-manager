@@ -88,7 +88,15 @@ jobs:
           done
           [[ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q db)")" == healthy ]]
           docker compose exec -T db mariadb -uroot -pci-root-password -e "CREATE DATABASE IF NOT EXISTS netlog_manager; CREATE DATABASE IF NOT EXISTS syslogdb; CREATE USER IF NOT EXISTS 'netlog_app'@'%' IDENTIFIED BY 'ci-app-password'; CREATE USER IF NOT EXISTS 'netlog_reader'@'%' IDENTIFIED BY 'ci-reader-password'; CREATE USER IF NOT EXISTS 'netlog_ingest'@'%' IDENTIFIED BY 'ci-ingest-password'; CREATE USER IF NOT EXISTS 'netlog_maintenance'@'%' IDENTIFIED BY 'ci-maint-password'; GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%'; GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%'; GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%'; GRANT CREATE ON syslogdb.* TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES;"
-          for f in database/migrations/*.sql; do docker compose exec -T db mariadb -uroot -pci-root-password < "$f"; done
+          docker compose exec -T db mariadb -uroot -pci-root-password -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%';" 2>/dev/null || true
+          for f in database/migrations/*.sql; do
+            if [[ "$f" == *0002_daily_log_tables.sql ]]; then
+              sed '/^CALL CreateFutureTables();$/d' "$f" | docker compose exec -T db mariadb -uroot -pci-root-password
+              docker compose exec -T db mariadb -uroot -pci-root-password -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; CALL syslogdb.CreateFutureTables();"
+            else
+              docker compose exec -T db mariadb -uroot -pci-root-password < "$f"
+            fi
+          done
           docker compose up -d app syslog proxy
           for i in $(seq 1 30); do curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null && break; sleep 2; done
           curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null
