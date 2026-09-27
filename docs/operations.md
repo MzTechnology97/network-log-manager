@@ -56,4 +56,6 @@ The archive root is intentionally presented to containers as a bind mount. For l
 
 La directory archivio viene esposta ai container tramite bind mount. Per dischi locali, NFS e SMB/CIFS, il filesystem deve essere montato sull'host Docker e il relativo mount point usato come `ARCHIVE_ROOT`. In questo modo la GUI non riceve privilegi di mount sull'host.
 
-SFTP and S3 are represented as external storage targets for future replication/synchronization workflows; they are not mounted directly by the web container.
+SFTP and S3-compatible targets are accessed by the storage backend and are not mounted directly by the web container. Storage targets are integrity-tested before activation, replicas are tracked independently, and verified replicas can provide read fallback. Automatic notification delivery attempts are recorded as SENT/FAILED for diagnosis.
+
+See [Storage, replication and monitoring](storage-monitoring.md) for roles, health states, replication, fallback and notification event types.
