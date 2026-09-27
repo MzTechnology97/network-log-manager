@@ -1,75 +1,73 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT/scripts/lib/common.sh"
+LAUNCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$LAUNCH_ROOT/scripts/lib/common.sh"
 require_root
 load_install_state
-cd "$REPO_ROOT"
+REPO="${REPO_ROOT:?REPO_ROOT is not configured}"
+cd "$REPO"
 
 old="$(git rev-parse HEAD)"
 log "Current revision: $old"
 git fetch --tags --prune origin
 
 case "${UPDATE_CHANNEL:-stable}" in
- stable)
-   target="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -Ev -- '-(rc|beta|alpha)' | head -n1)"
-   ;;
- candidate)
-   target="$(git tag --list 'v*-rc*' --sort=-v:refname | head -n1)"
-   ;;
+ stable) target="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -Ev -- '-(rc|beta|alpha)' | head -n1)";;
+ candidate) target="$(git tag --list 'v*-rc*' --sort=-v:refname | head -n1)";;
  development) target="origin/main";;
  *) die "Unknown update channel.";;
 esac
 [[ -n "$target" ]] || die "No release is available for channel ${UPDATE_CHANNEL:-stable}."
 target_commit="$(git rev-parse "$target^{commit}")"
-if [[ "$target_commit" == "$old" ]]; then
-  log "Already up to date."
-  exit 0
-fi
+[[ "$target_commit" != "$old" ]] || { log "Already up to date."; exit 0; }
 
-backup_path="$("$ROOT/scripts/backup.sh" | tail -n1)"
+if [[ "$MODE" == docker ]]; then
+  backup_path="$("$REPO/scripts/backup-docker.sh" | tail -n1)"
+else
+  backup_path="$("$REPO/scripts/backup.sh" | tail -n1)"
+fi
 log "Pre-update backup: $backup_path"
+
+rollback(){
+  log "Rolling application code back to $old. Database migrations remain forward-only."
+  git checkout --detach "$old"
+  if [[ "$MODE" == docker ]]; then
+    source "$CONFIG_DIR/install.env"
+    cd "$REPO"
+    if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi
+    "${C[@]}" --env-file "$STATE_DIR/docker/.env" up -d --build --remove-orphans
+  else
+    rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
+    rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
+    systemctl restart netlog-manager.service
+  fi
+}
+trap 'rc=$?; if (( rc != 0 )); then rollback || true; fi; exit $rc' EXIT
 
 git checkout --detach "$target_commit"
 
-if ! "$ROOT/scripts/migrate.sh"; then
-  log "Migration failed. Returning code to $old. Database migrations are forward-only."
-  git checkout --detach "$old"
-  exit 1
-fi
-
 if [[ "$MODE" == docker ]]; then
-  docker compose pull
-  docker compose up -d --remove-orphans
+  "$REPO/scripts/migrate-docker.sh"
+  source "$CONFIG_DIR/install.env"
+  if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi
+  "${C[@]}" --env-file "$STATE_DIR/docker/.env" build --pull
+  "${C[@]}" --env-file "$STATE_DIR/docker/.env" up -d --remove-orphans
 else
-  rsync -a --delete "$ROOT/app/" /opt/netlog-manager/app/
-  rsync -a --delete "$ROOT/templates/" /opt/netlog-manager/templates/
-  install -m 0755 "$ROOT/create-admin.py" /opt/netlog-manager/create-admin.py
-  install -m 0644 "$ROOT/requirements.txt" /opt/netlog-manager/requirements.txt
+  "$REPO/scripts/migrate.sh"
+  rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
+  rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
+  install -m 0755 "$REPO/create-admin.py" /opt/netlog-manager/create-admin.py
+  install -m 0644 "$REPO/requirements.txt" /opt/netlog-manager/requirements.txt
   /opt/netlog-manager/venv/bin/pip install --disable-pip-version-check -r /opt/netlog-manager/requirements.txt
-  for unit in "$ROOT"/systemd/*; do
-    [[ -f "$unit" ]] || continue
-    install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
-  done
+  for unit in "$REPO"/systemd/*; do [[ -f "$unit" ]] && install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"; done
   install -d -m 0755 /opt/netlog-manager/scripts
-  rsync -a --delete "$ROOT/scripts/" /opt/netlog-manager/scripts/
+  rsync -a --delete "$REPO/scripts/" /opt/netlog-manager/scripts/
   systemctl daemon-reload
   systemctl restart netlog-manager.service
 fi
 
-if ! "$ROOT/scripts/healthcheck.sh"; then
-  log "Health check failed; returning application code to $old. Database migrations are not automatically reversed."
-  git checkout --detach "$old"
-  if [[ "$MODE" == docker ]]; then
-    docker compose up -d --remove-orphans
-  else
-    rsync -a --delete "$ROOT/app/" /opt/netlog-manager/app/
-    rsync -a --delete "$ROOT/templates/" /opt/netlog-manager/templates/
-    systemctl restart netlog-manager.service
-  fi
-  exit 1
-fi
-
+"$REPO/scripts/healthcheck.sh"
 printf '%s\n' "$target_commit" >"$STATE_DIR/current-revision"
 chmod 0600 "$STATE_DIR/current-revision"
+trap - EXIT
 log "Update completed: $target_commit"
