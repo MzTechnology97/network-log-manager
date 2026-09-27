@@ -1,0 +1,8 @@
+[Unit]
+Description=Network Log Manager Docker archive job
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/netlog-manager/scripts/archive-docker.sh --limit 10
