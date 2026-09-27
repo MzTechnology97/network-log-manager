@@ -15,11 +15,13 @@ python3 - "$template" "$tmp" "$SYSLOG_PORT" "localhost" "$NETLOG_INGEST_PASSWORD
 from pathlib import Path
 import sys
 src, dst, port, host, password = sys.argv[1:]
+def q(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 text = Path(src).read_text()
 for key, value in {
     "@@SYSLOG_PORT@@": port,
     "@@DB_HOST@@": host,
-    "@@NETLOG_INGEST_PASSWORD@@": password,
+    "@@NETLOG_INGEST_PASSWORD@@": q(password),
 }.items():
     text = text.replace(key, value)
 if "@@" in text:
