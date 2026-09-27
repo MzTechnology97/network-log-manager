@@ -1,6 +1,6 @@
 # Network Log Manager
 
-Network Log Manager is a self-hosted platform for collecting, retaining, searching and exporting network connection logs. The current implementation is based on the production reference installation under `reference/2026-09-27/`.
+Network Log Manager is a self-hosted platform for collecting, retaining, searching and exporting network connection logs. It is designed for reproducible Docker Compose deployments and compatible native Debian installations.
 
 ## Implemented features
 
@@ -79,7 +79,7 @@ The initial self-signed certificate is suitable for initial/internal deployment.
 
 ## Docker
 
-Choose **Docker Compose** from the same bootstrap. Docker support is being finalized on the `bootstrap-installer` branch; do not use it as a production deployment until the branch is released.
+Choose **Docker Compose** from the same bootstrap. Docker Compose is the recommended deployment mode for new installations. The release process validates image builds, syslog-ng configuration and an end-to-end HTTPS stack before promotion.
 
 Persistent database data and archives are deliberately kept outside application images.
 
@@ -111,14 +111,16 @@ Application, reader, ingestion and maintenance database identities are separate.
 
 Detailed documentation is maintained in `docs/` and can also be published into the GitHub Wiki:
 
+- [Installation](docs/installation.md)
 - [Architecture](docs/architecture.md)
 - [Configuration and files](docs/configuration.md)
 - [Operations](docs/operations.md)
 - [Database and retention](docs/database-retention.md)
 - [Updates and recovery](docs/updates-recovery.md)
+- [Security](docs/security.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Development and CI](docs/development.md)
 
 ## Development
 
-Pull requests run CI checks for Bash/Python syntax, dependency installation, migration naming, secret/private-key detection and Docker Compose validation.
-
-`reference/2026-09-27/` is a sanitized discovery snapshot of the original working installation. It is documentation/reference material and is not deployed directly.
+Pull requests run CI checks for Bash/Python syntax, dependency installation, migration integrity, secret/private-key detection, Docker builds, syslog-ng syntax and end-to-end Docker/HTTPS validation.
