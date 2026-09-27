@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY templates ./templates
+COPY static ./static
 COPY create-admin.py .
 COPY docker/worker-entrypoint.sh /usr/local/bin/netlog-worker
 RUN chmod 0755 /usr/local/bin/netlog-worker
