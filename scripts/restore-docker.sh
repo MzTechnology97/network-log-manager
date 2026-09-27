@@ -6,7 +6,7 @@ require_root
 load_install_state
 source "$CONFIG_DIR/install.env"
 source "$CONFIG_DIR/secrets.env"
-[[ "${INSTALL_MODE:-}" == "docker" ]] || die "Docker restore requires INSTALL_MODE=docker."
+[[ "${MODE:-}" == "docker" ]] || die "Docker restore requires MODE=docker."
 backup="${1:-}"
 [[ -n "$backup" && -d "$backup" ]] || die "Usage: $0 /var/backups/netlog-manager/YYYYmmdd_HHMMSS"
 [[ -f "$backup/SHA256SUMS" && -f "$backup/netlog_manager.sql" && -f "$backup/syslogdb-schema.sql" ]] || die "Incomplete backup."
