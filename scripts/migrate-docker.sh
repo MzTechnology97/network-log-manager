@@ -28,4 +28,4 @@ for f in "$ROOT"/database/migrations/*.sql; do
   db netlog_manager -e "INSERT INTO schema_migrations(version,checksum) VALUES('$version','$checksum');"
 done
 
-db -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES;"
+db -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES; CALL syslogdb.CreateFutureTables();"
