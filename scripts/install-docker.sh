@@ -111,7 +111,9 @@ else
   log "Administrator account already exists; skipping initial account creation."
 fi
 
-install -d -m 0755 /opt/netlog-manager/scripts
+install -d -m 0755 /opt/netlog-manager/scripts/lib
+install -m 0644 "$ROOT/scripts/lib/common.sh" /opt/netlog-manager/scripts/lib/common.sh
+install -m 0644 "$ROOT/scripts/lib/db-root.sh" /opt/netlog-manager/scripts/lib/db-root.sh
 install -m 0755 "$ROOT/scripts/archive-docker.sh" /opt/netlog-manager/scripts/archive-docker.sh
 install -m 0755 "$ROOT/scripts/rotate-live-log-docker.sh" /opt/netlog-manager/scripts/rotate-live-log-docker.sh
 install -m 0755 "$ROOT/scripts/backup-docker.sh" /opt/netlog-manager/scripts/backup-docker.sh
