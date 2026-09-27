@@ -108,6 +108,7 @@ SQL
 
 log "Applying tracked Docker migrations"
 "$ROOT/scripts/migrate-docker.sh"
+bash "$ROOT/scripts/normalize-log-timezone-docker.sh"
 
 log "Starting application and syslog ingestion"
 "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" up -d --build

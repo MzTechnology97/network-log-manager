@@ -64,6 +64,7 @@ git checkout --detach "$target_commit"
 if [[ "$MODE" == docker ]]; then
   sanitize_compose_environment
   "$REPO/scripts/migrate-docker.sh"
+  bash "$REPO/scripts/normalize-log-timezone-docker.sh"
   sanitize_compose_environment
   source "$CONFIG_DIR/install.env"
   if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi

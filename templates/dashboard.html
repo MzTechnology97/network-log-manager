@@ -398,6 +398,25 @@ footer {
     </section>
 
 
+    <section class="card span2">
+        <div class="label">Archive Storage</div>
+        <div id="remote-storage" class="value">—</div>
+        <div id="remote-storage-detail" class="sub">—</div>
+    </section>
+
+    <section class="card span2">
+        <div class="label">Active Alerts</div>
+        <div id="active-alert-count" class="value">—</div>
+        <div id="active-alert-detail" class="sub">—</div>
+    </section>
+
+
+    <section class="card span4">
+        <div class="label">Background Workers</div>
+        <div id="workers" class="event muted">—</div>
+    </section>
+
+
     <section class="card span4">
         <div class="label">Latest Event</div>
 
@@ -632,6 +651,30 @@ async function refresh() {
             "uptime"
         ).textContent =
             uptime(d.system.uptime_seconds);
+
+        const remoteOk = !d.storage.remote_enabled || (d.storage.remote_test_status === "OK" && d.storage.remote_available);
+        document.getElementById("remote-storage").textContent =
+            d.storage.remote_enabled ? d.storage.remote_type : "Local";
+        document.getElementById("remote-storage").className =
+            "value " + (remoteOk ? "good-text" : "bad-text");
+        document.getElementById("remote-storage-detail").textContent =
+            d.storage.remote_enabled
+                ? ("Test " + (d.storage.remote_test_status || "NOT_TESTED") +
+                   (d.storage.remote_tested_at ? " · " + d.storage.remote_tested_at : ""))
+                : "Archivio locale";
+
+        document.getElementById("active-alert-count").textContent =
+            num(d.storage.open_alerts);
+        const alerts = d.storage.active_alerts || [];
+        document.getElementById("active-alert-detail").textContent =
+            alerts.length ? alerts.map(a => a.title).join(" · ") : "Nessun problema attivo";
+
+        const workers = d.services.workers || {};
+        document.getElementById("workers").textContent =
+            Object.entries(workers).map(([name,state]) =>
+                (state.ok ? "● " : "○ ") + name +
+                (state.age_seconds === null ? " (waiting)" : " (" + state.age_seconds.toFixed(0) + "s)")
+            ).join("   ·   ");
 
         const row = d.database.last_row;
 

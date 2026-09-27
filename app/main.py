@@ -22,7 +22,9 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from .database import app_db
+from .remote_storage import browse as storage_browse, integrity_test as storage_integrity_test, encrypt_secret, decrypt_secret
 from .metrics import collect_dashboard
+from .monitoring import send_channel
 from .explorer import search_nat, ExplorerError
 from .advanced_search import search_logs, AdvancedSearchError
 from .export_search import (
@@ -4148,7 +4150,7 @@ def admin_settings_page(request: Request):
             settings={r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
             cur.execute("SELECT id,name,channel_type,enabled FROM notification_channels ORDER BY name")
             channels=cur.fetchall()
-            cur.execute("SELECT * FROM system_alerts ORDER BY resolved_at IS NULL DESC,last_seen_at DESC LIMIT 50")
+            cur.execute("SELECT * FROM system_alerts WHERE resolved_at IS NULL ORDER BY severity DESC,last_seen_at DESC LIMIT 50")
             alerts=cur.fetchall()
     finally: conn.close()
     raw=request.cookies.get(COOKIE_NAME)
@@ -4212,3 +4214,116 @@ def admin_channel_delete(channel_id: int, request: Request, csrf: str=Form(...))
             conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Notification+channel+deleted",status_code=303)
+
+
+def _admin_storage_context():
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT setting_key,setting_value FROM settings WHERE setting_key LIKE 'external_storage_%'")
+            return {r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
+    finally: conn.close()
+
+@app.post("/admin/settings/storage/browse")
+def admin_storage_browse(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form("")):
+    session=get_session(request)
+    if not session or not is_administrator(session): return JSONResponse({"error":"Forbidden"},status_code=403)
+    if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
+    cfg={"type":storage_type,"host":host,"port":port,"share":share,"path":path,"domain":domain}
+    secret={"username":username,"password":password}
+    if not username and not password:
+        try: secret=decrypt_secret(_admin_storage_context().get("external_storage_secret",""))
+        except Exception: secret={}
+    try:
+        folders=storage_browse(cfg,secret,folder)
+        return {"ok":True,"folder":folder,"folders":folders}
+    except Exception as exc:
+        return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
+
+@app.post("/admin/settings/storage/test")
+def admin_storage_test(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form("")):
+    session=get_session(request)
+    if not session or not is_administrator(session): return JSONResponse({"error":"Forbidden"},status_code=403)
+    if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
+    cfg={"type":storage_type,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip()}
+    secret={"username":username,"password":password}
+    if not username and not password:
+        try: secret=decrypt_secret(_admin_storage_context().get("external_storage_secret",""))
+        except Exception: secret={}
+    try:
+        result=storage_integrity_test(cfg,secret,folder)
+    except Exception as exc:
+        return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            values={
+              "external_storage_enabled":"1","external_storage_type":storage_type.upper(),
+              "external_storage_host":host.strip(),"external_storage_port":port.strip(),
+              "external_storage_share":share.strip(),"external_storage_path":path.strip(),
+              "external_storage_folder":folder.strip(),"external_storage_domain":domain.strip(),
+              "external_storage_secret":encrypt_secret(secret),
+              "external_storage_test_status":"OK","external_storage_tested_at":datetime.now().isoformat(timespec="seconds"),
+              "external_storage_test_sha256":result["sha256"],
+            }
+            for key,value in values.items():
+                cur.execute("INSERT INTO settings(setting_key,setting_value) VALUES(%s,%s) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)",(key,value))
+            write_audit(cur,user_id=session["user_id"],username=session["username"],action="STORAGE_VERIFIED",category="ADMIN",request=request,details=f"{storage_type.upper()} storage verified with write/read/SHA-256 test")
+            conn.commit()
+    finally: conn.close()
+    return {"ok":True,"message":"Storage verificato e salvato","sha256":result["sha256"],"bytes":result["bytes"]}
+
+@app.post("/admin/settings/channels/{channel_id}/toggle")
+def admin_channel_toggle(channel_id: int, request: Request, csrf: str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE notification_channels SET enabled=IF(enabled=1,0,1) WHERE id=%s",(channel_id,))
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+updated",status_code=303)
+
+
+@app.post("/admin/settings/channels/simple")
+def admin_channel_simple(request: Request, csrf: str=Form(...), name: str=Form(...), channel_type: str=Form(...), destination: str=Form(""), host: str=Form(""), port: int=Form(587), username: str=Form(""), password: str=Form(""), bot_token: str=Form(""), chat_id: str=Form(""), webhook_url: str=Form(""), event_types: list[str]=Form([])):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    kind=channel_type.upper(); allowed={"EMAIL","TELEGRAM","SLACK","DISCORD","WEBHOOK"}
+    if kind not in allowed: return HTMLResponse("Invalid channel",status_code=400)
+    cfg={}; secret={}
+    if kind=="EMAIL":
+        cfg={"host":host,"port":port,"from":username,"to":destination,"username":username,"starttls":True}; secret={"password":password}
+    elif kind=="TELEGRAM":
+        cfg={"chat_id":chat_id}; secret={"bot_token":bot_token}
+    else:
+        cfg={"url":webhook_url}
+    import json
+    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","ingestion_stale","database_unavailable","syslog_listener_down"}]
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO notification_channels(name,channel_type,enabled,configuration_json,secret_json,event_types_json) VALUES(%s,%s,1,%s,%s,%s)",(name.strip(),kind,json.dumps(cfg),json.dumps(secret) if secret else None,json.dumps(events)))
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+channel+created",status_code=303)
+
+
+@app.post("/admin/settings/channels/{channel_id}/test")
+def admin_channel_test(channel_id: int, request: Request, csrf: str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM notification_channels WHERE id=%s",(channel_id,)); channel=cur.fetchone()
+        if not channel: return RedirectResponse("/admin/settings?message=Channel+not+found",status_code=303)
+        send_channel(channel,"Network Log Manager - Test","Canale configurato correttamente. Questo è un messaggio di test.")
+    except Exception:
+        return RedirectResponse("/admin/settings?message=Notification+test+failed",status_code=303)
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+test+sent",status_code=303)

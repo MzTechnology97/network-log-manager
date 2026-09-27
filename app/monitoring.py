@@ -4,6 +4,7 @@ from email.message import EmailMessage
 from pathlib import Path
 import socket
 from .database import app_db, syslog_db
+from .remote_storage import browse as storage_browse, decrypt_secret
 
 ALERT_KEYS=('storage_capacity','storage_unavailable','ingestion_stale','database_unavailable','syslog_listener_down')
 
@@ -50,7 +51,10 @@ def _record(key,severity,title,message,repeat_minutes):
             cur.execute('SELECT * FROM notification_channels WHERE enabled=1'); channels=cur.fetchall() if should_notify else []; conn.commit()
         delivered=False
         for channel in channels:
-            try: send_channel(channel,title,message); delivered=True
+            try:
+                selected=json.loads(channel.get('event_types_json') or '[]')
+                if selected and key not in selected: continue
+                send_channel(channel,title,message); delivered=True
             except Exception: pass
         if delivered:
             with conn.cursor() as cur:
@@ -69,8 +73,15 @@ def _resolve_inactive(active):
 
 def run_checks():
     s=settings(); active=[]; repeat=int(s.get('alert_repeat_minutes','60')); path=Path(s.get('external_storage_path') or os.environ.get('ARCHIVE_ROOT','/archive/mikrotik'))
+    storage_type=s.get('external_storage_type','LOCAL').upper()
+    if s.get('external_storage_enabled')=='1' and storage_type in ('SMB','SFTP'):
+        try:
+            cfg={'type':storage_type,'host':s.get('external_storage_host',''),'port':s.get('external_storage_port',''),'share':s.get('external_storage_share',''),'path':s.get('external_storage_path',''),'folder':s.get('external_storage_folder',''),'domain':s.get('external_storage_domain','')}
+            storage_browse(cfg,decrypt_secret(s.get('external_storage_secret','')),s.get('external_storage_folder',''))
+        except Exception as exc:
+            active.append('storage_unavailable'); _record('storage_unavailable','CRITICAL','Remote storage unavailable',str(exc),repeat)
     try:
-        usage=shutil.disk_usage(path); percent=(usage.used/usage.total)*100 if usage.total else 0; warning=float(s.get('storage_warning_percent','80')); critical=float(s.get('storage_critical_percent','90'))
+        usage=shutil.disk_usage(path if storage_type=='LOCAL' else Path(os.environ.get('ARCHIVE_ROOT','/archive/mikrotik'))); percent=(usage.used/usage.total)*100 if usage.total else 0; warning=float(s.get('storage_warning_percent','80')); critical=float(s.get('storage_critical_percent','90'))
         if percent>=critical: active.append('storage_capacity'); _record('storage_capacity','CRITICAL','Storage critical',str(path)+': %.1f%% used'%percent,repeat)
         elif percent>=warning: active.append('storage_capacity'); _record('storage_capacity','WARNING','Storage almost full',str(path)+': %.1f%% used'%percent,repeat)
     except Exception as exc: active.append('storage_unavailable'); _record('storage_unavailable','CRITICAL','Storage unavailable',str(exc),repeat)

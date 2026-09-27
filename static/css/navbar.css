@@ -1,4 +1,6 @@
 .nlm-header {
+    /* Explicit element-level rules prevent legacy page-wide header/nav CSS
+       from overriding the shared navigation component. */
     min-height: 68px;
     padding: 0 28px;
     background: #0f172a;
@@ -215,5 +217,38 @@
 
     .nlm-account-dropdown {
         width: min(250px, calc(100vw - 24px));
+    }
+}
+
+/* Win against legacy page-level selectors such as "header", "nav" and
+   generic link styles that are still embedded in older templates. */
+header.nlm-header {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+    align-items: center;
+    justify-content: initial;
+}
+header.nlm-header nav.nlm-main-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+header.nlm-header .nlm-main-nav a,
+header.nlm-header .nlm-brand,
+header.nlm-header .nlm-account-menu a {
+    text-decoration: none;
+}
+header.nlm-header details.nlm-account-menu > .nlm-account-dropdown {
+    display: none;
+}
+header.nlm-header details.nlm-account-menu[open] > .nlm-account-dropdown {
+    display: block;
+}
+@media (max-width: 900px) {
+    header.nlm-header {
+        grid-template-columns: 1fr auto;
+    }
+    header.nlm-header nav.nlm-main-nav {
+        justify-content: flex-start;
     }
 }

@@ -6,6 +6,7 @@ require_root
 load_install_state
 source "$CONFIG_DIR/install.env"
 source "$CONFIG_DIR/secrets.env"
+export TZ="${TZ:-Europe/Rome}"
 [[ "${MODE:-}" == "docker" ]] || die "Docker archive job requires MODE=docker."
 cd "$REPO_ROOT"
 if docker compose version >/dev/null 2>&1; then COMPOSE=(docker compose); else COMPOSE=(docker-compose); fi
@@ -60,6 +61,16 @@ RETENTION_POLICY=archive_after_${archive_after_days}_days
 EOF
   printf '%s  %s\n' "$hash" "$(basename "$final")" >"$sha"
   (cd "$dir" && sha256sum -c "$(basename "$sha")" >/dev/null)
+  # If a GUI-configured remote storage is active and verified, copy all
+  # archive artifacts before the source DB table can be dropped.
+  if ! {
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$final")" --relative "$y/$m/$(basename "$final")" --sha256 "$hash" &&
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$meta")" --relative "$y/$m/$(basename "$meta")" &&
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$sha")" --relative "$y/$m/$(basename "$sha")";
+  }; then
+    rm -f "$final" "$meta" "$sha"
+    die "Remote archive replication failed for $table; source table preserved and local partial archive reset."
+  fi
   still_exists="$(db -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB' AND table_name='$table';")"
   [[ "$still_exists" == "1" ]] || die "Source table disappeared before DROP: $table"
   db "$DB" -e "DROP TABLE \`$table\`;"
