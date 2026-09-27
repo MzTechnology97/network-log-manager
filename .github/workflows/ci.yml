@@ -1,0 +1,21 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell syntax
+        run: |
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: No committed secrets
+        run: |
+          ! grep -RInE --exclude='*.example' --exclude-dir=reference '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|DB_ROOT_PASSWORD=.+|SECRET_KEY=.+|NETLOG_.*PASSWORD=.+)' . | grep -v 'CHANGE_ME'
+      - name: Migration naming
+        run: |
+          find database/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | grep -Ev '^[0-9]{4}_[a-z0-9_-]+\.sql$' && exit 1 || true
