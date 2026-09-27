@@ -652,7 +652,7 @@ async function refresh() {
         ).textContent =
             uptime(d.system.uptime_seconds);
 
-        const remoteOk = !d.storage.remote_enabled || d.storage.remote_test_status === "OK";
+        const remoteOk = !d.storage.remote_enabled || (d.storage.remote_test_status === "OK" && d.storage.remote_available);
         document.getElementById("remote-storage").textContent =
             d.storage.remote_enabled ? d.storage.remote_type : "Local";
         document.getElementById("remote-storage").className =
