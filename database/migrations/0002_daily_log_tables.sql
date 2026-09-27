@@ -2,7 +2,7 @@ USE syslogdb;
 
 DROP PROCEDURE IF EXISTS CreateFutureTables;
 DELIMITER //
-CREATE DEFINER='netlog_maintenance'@'localhost' PROCEDURE CreateFutureTables()
+CREATE DEFINER='netlog_maintenance'@'%' PROCEDURE CreateFutureTables()
 SQL SECURITY DEFINER
 BEGIN
     DECLARE i INT DEFAULT 0;
@@ -35,7 +35,7 @@ END//
 DELIMITER ;
 
 DROP EVENT IF EXISTS AutoCreateTables;
-CREATE DEFINER='netlog_maintenance'@'localhost' EVENT AutoCreateTables
+CREATE DEFINER='netlog_maintenance'@'%' EVENT AutoCreateTables
 ON SCHEDULE EVERY 1 DAY
 STARTS (CURRENT_DATE + INTERVAL 23 HOUR + INTERVAL 55 MINUTE)
 ON COMPLETION NOT PRESERVE ENABLE
