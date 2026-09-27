@@ -4216,41 +4216,37 @@ def admin_channel_delete(channel_id: int, request: Request, csrf: str=Form(...))
 
 
 @app.post("/admin/settings/storage/browse")
-def admin_storage_browse(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form("")):
+def admin_storage_browse(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form(""), private_key: str=Form(""), key_passphrase: str=Form(""), endpoint: str=Form(""), bucket: str=Form(""), region: str=Form(""), access_key: str=Form(""), secret_key: str=Form("")):
     session=get_session(request)
     if not session or not is_administrator(session): return JSONResponse({"error":"Forbidden"},status_code=403)
     if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
-    cfg={"type":storage_type,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip()}
+    cfg={"type":storage_type,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip(),"endpoint":endpoint.strip(),"bucket":bucket.strip(),"region":region.strip(),"folder":folder.strip()}
+    secret={"username":username,"password":password,"private_key":private_key,"key_passphrase":key_passphrase,"access_key":access_key,"secret_key":secret_key}
     try:
-        folders=storage_browse(cfg,{"username":username,"password":password},folder)
+        folders=storage_browse(cfg,secret,folder)
         return {"ok":True,"folder":folder,"folders":folders}
     except Exception as exc: return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
 
 @app.post("/admin/settings/storage/add")
-def admin_storage_add(request: Request, csrf: str=Form(...), name: str=Form(...), storage_type: str=Form(...), role: str=Form("REPLICA"), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form(""), read_fallback: str=Form("")):
+def admin_storage_add(request: Request, csrf: str=Form(...), name: str=Form(...), storage_type: str=Form(...), role: str=Form("REPLICA"), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form(""), private_key: str=Form(""), key_passphrase: str=Form(""), endpoint: str=Form(""), bucket: str=Form(""), region: str=Form(""), access_key: str=Form(""), secret_key: str=Form(""), read_fallback: str=Form("")):
     session=get_session(request)
     if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
     if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
     kind=storage_type.upper(); role=role.upper()
-    if kind not in {"LOCAL","SMB","SFTP"} or role not in {"PRIMARY","REPLICA"}: return HTMLResponse("Invalid storage",status_code=400)
-    cfg={"type":kind,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip()}
-    secret={"username":username,"password":password}
+    if kind not in {"LOCAL","SMB","SFTP","S3"} or role not in {"PRIMARY","REPLICA"}: return HTMLResponse("Invalid storage",status_code=400)
+    cfg={"type":kind,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip(),"endpoint":endpoint.strip(),"bucket":bucket.strip(),"region":region.strip(),"folder":folder.strip()}
+    secret={"username":username,"password":password,"private_key":private_key,"key_passphrase":key_passphrase,"access_key":access_key,"secret_key":secret_key}
     try:
-        if kind=="LOCAL":
-            p=Path(path).resolve()
-            if not p.is_dir(): raise ValueError("Il percorso locale non esiste")
-            result={"sha256":None}
-        else:
-            result=storage_integrity_test(cfg,secret,folder)
+        result=storage_integrity_test(cfg,secret,folder)
     except Exception as exc:
         return RedirectResponse("/admin/settings?message=Storage+test+failed%3A+"+str(exc).replace(" ","+"),status_code=303)
     conn=app_db()
     try:
         with conn.cursor() as cur:
             if role=="PRIMARY": cur.execute("UPDATE storage_targets SET role='REPLICA' WHERE role='PRIMARY'")
-            cur.execute("""INSERT INTO storage_targets(name,storage_type,role,enabled,read_fallback,host,port,share_name,base_path,folder,domain_name,secret_encrypted,health_status,test_status,tested_at,test_sha256)
-              VALUES(%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,'UNKNOWN','OK',NOW(3),%s)""",
-              (name.strip(),kind,role,1,1 if read_fallback else 0,host.strip() or None,int(port) if port.strip() else None,share.strip() or None,path.strip(),folder.strip(),domain.strip() or None,encrypt_secret(secret) if kind!="LOCAL" else None,result.get("sha256")))
+            cur.execute("""INSERT INTO storage_targets(name,storage_type,role,enabled,read_fallback,host,port,share_name,endpoint_url,bucket_name,region_name,base_path,folder,domain_name,secret_encrypted,health_status,test_status,tested_at,test_sha256)
+              VALUES(%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'HEALTHY','OK',NOW(3),%s)""",
+              (name.strip(),kind,role,1 if read_fallback else 0,host.strip() or None,int(port) if port.strip() else None,share.strip() or None,endpoint.strip() or None,bucket.strip() or None,region.strip() or None,path.strip(),folder.strip(),domain.strip() or None,encrypt_secret(secret) if kind!="LOCAL" else None,result.get("sha256")))
             conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Storage+verified+and+added",status_code=303)
@@ -4297,6 +4293,9 @@ def admin_storage_delete(storage_id:int,request:Request,csrf:str=Form(...)):
     conn=app_db()
     try:
         with conn.cursor() as cur:
+            cur.execute("SELECT storage_type,base_path,role FROM storage_targets WHERE id=%s",(storage_id,)); target=cur.fetchone()
+            if target and target["storage_type"]=="LOCAL" and target["base_path"]=="/archive/mikrotik":
+                return RedirectResponse("/admin/settings?message=Default+local+storage+cannot+be+removed",status_code=303)
             cur.execute("DELETE FROM storage_targets WHERE id=%s AND role<>'PRIMARY'",(storage_id,)); conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Storage+removed",status_code=303)
