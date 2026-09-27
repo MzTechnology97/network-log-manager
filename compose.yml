@@ -101,6 +101,20 @@ services:
       - app-cache:/var/cache/netlog-manager
       - app-state:/var/lib/netlog-manager
 
+  monitor:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","monitor"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    volumes:
+      - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
+      - live-log:/var/log:ro
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
   syslog:
     build:
       context: docker/syslog-ng
