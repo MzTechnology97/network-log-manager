@@ -4149,7 +4149,12 @@ def admin_settings_page(request: Request):
         with conn.cursor() as cur:
             cur.execute("SELECT setting_key,setting_value FROM settings")
             settings={r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
-            cur.execute("SELECT id,name,channel_type,enabled,event_types_json FROM notification_channels ORDER BY name")
+            cur.execute("""SELECT c.id,c.name,c.channel_type,c.enabled,c.event_types_json,
+                    d.status AS last_delivery_status,d.attempted_at AS last_delivery_at,d.error_message AS last_delivery_error
+                    FROM notification_channels c
+                    LEFT JOIN notification_delivery_log d ON d.id=(
+                      SELECT d2.id FROM notification_delivery_log d2 WHERE d2.channel_id=c.id ORDER BY d2.id DESC LIMIT 1
+                    ) ORDER BY c.name""")
             channels=cur.fetchall()
             cur.execute("SELECT * FROM system_alerts WHERE resolved_at IS NULL ORDER BY severity DESC,last_seen_at DESC LIMIT 50")
             alerts=cur.fetchall()
