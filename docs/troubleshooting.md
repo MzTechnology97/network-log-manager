@@ -16,6 +16,12 @@ Le immagini correnti creano sempre `/opt/netlog-manager/static`. Ricostruire l'i
 ### Archivio
 Un file archivio esistente non causa la cancellazione della tabella sorgente. Il DROP avviene soltanto dopo dump, test zstd, verifica contenuto e checksum. Non usare `/archive/mikrotik/test` come archivio di produzione.
 
+### Storage locale OFFLINE / Permission denied
+Su Docker verificare prima lo stato dalla pagina **Impostazioni** e poi i permessi del bind mount. Il runtime usa UID 10001/GID 999 e l'archive root deve essere scrivibile dal monitor. Gli updater correnti riparano la sola root con mode 0750 senza eseguire chown ricorsivi sui dati storici.
+
+### Notifiche automatiche
+Controllare **Ultima consegna automatica** e la tabella `notification_delivery_log`: ogni tentativo automatico viene registrato come SENT o FAILED con l'errore disponibile. Verificare anche che il canale sia sottoscritto allo specifico event type.
+
 ### Restore
 Il restore Docker accetta soltanto backup nel percorso gestito, verifica `SHA256SUMS` e crea un backup di sicurezza prima del ripristino. Il restore applicativo non cancella i log online esistenti in `syslogdb`.
 
