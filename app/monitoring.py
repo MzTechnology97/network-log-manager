@@ -66,3 +66,7 @@ def run_checks():
         finally: conn.close()
     except Exception as exc: active.append('database_unavailable'); _record('database_unavailable','CRITICAL','Database check failed',str(exc))
     return active
+
+
+if __name__=='__main__':
+    run_checks()
