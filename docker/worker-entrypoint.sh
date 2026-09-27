@@ -20,5 +20,11 @@ case "${1:-}" in
       sleep 86400
     done
     ;;
+  monitor)
+    while true; do
+      python -m app.monitoring || true
+      sleep "${MONITOR_INTERVAL_SECONDS:-60}"
+    done
+    ;;
   *) echo "Unknown worker mode" >&2; exit 2;;
 esac
