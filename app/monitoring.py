@@ -79,8 +79,11 @@ def run_checks():
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='syslogdb' AND table_name REGEXP '^mikrotik_logs_[0-9]{4}_[0-9]{2}_[0-9]{2}$' ORDER BY table_name DESC LIMIT 1"); table=cur.fetchone()
-                if table:
-                    name=table['table_name']; cur.execute('SELECT MAX(timestamp) AS ts FROM '+name); last=cur.fetchone()['ts']; stale=int(s.get('ingestion_stale_minutes','5'))
+                stale=int(s.get('ingestion_stale_minutes','5'))
+                if not table:
+                    active.append('ingestion_stale'); _record('ingestion_stale','CRITICAL','No recent network logs','No daily log table is available.',repeat)
+                else:
+                    name=table['table_name']; cur.execute('SELECT MAX(timestamp) AS ts FROM '+name); last=cur.fetchone()['ts']
                     if not last or (datetime.now()-last).total_seconds()>stale*60: active.append('ingestion_stale'); _record('ingestion_stale','CRITICAL','No recent network logs','No log received within the last '+str(stale)+' minutes. Last record: '+str(last),repeat)
         finally: conn.close()
     except Exception as exc: active.append('database_unavailable'); _record('database_unavailable','CRITICAL','Database check failed',str(exc),repeat)
