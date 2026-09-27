@@ -99,6 +99,10 @@ log "Create the initial Administrator account."
 install -d -m 0755 /opt/netlog-manager/scripts
 install -m 0755 "$ROOT/scripts/archive-docker.sh" /opt/netlog-manager/scripts/archive-docker.sh
 install -m 0755 "$ROOT/scripts/rotate-live-log-docker.sh" /opt/netlog-manager/scripts/rotate-live-log-docker.sh
+install -m 0755 "$ROOT/scripts/backup-docker.sh" /opt/netlog-manager/scripts/backup-docker.sh
+install -m 0755 "$ROOT/scripts/restore-docker.sh" /opt/netlog-manager/scripts/restore-docker.sh
+install -m 0755 "$ROOT/scripts/migrate-docker.sh" /opt/netlog-manager/scripts/migrate-docker.sh
+install -m 0755 "$ROOT/scripts/healthcheck.sh" /opt/netlog-manager/scripts/healthcheck.sh
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.service" /etc/systemd/system/netlog-docker-archive.service
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.timer" /etc/systemd/system/netlog-docker-archive.timer
 install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.service" /etc/systemd/system/netlog-docker-logrotate.service
