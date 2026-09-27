@@ -1,3 +1,0 @@
-GRANT USAGE ON *.* TO `netlog_maintenance`@`localhost` IDENTIFIED BY PASSWORD '***REDACTED***'
-GRANT CREATE ON `syslogdb`.* TO `netlog_maintenance`@`localhost`
-GRANT EXECUTE ON PROCEDURE `syslogdb`.`createfuturetables` TO `netlog_maintenance`@`localhost`
