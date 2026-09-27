@@ -20,7 +20,7 @@ def _post(url,payload):
     with urllib.request.urlopen(req,timeout=10) as response: return response.status
 
 def send_channel(channel,title,message):
-    cfg=json.loads(channel['configuration_json'] or '{}'); kind=channel['channel_type']
+    cfg=json.loads(channel['configuration_json'] or '{}'); cfg.update(json.loads(channel.get('secret_json') or '{}')); kind=channel['channel_type']
     if kind=='WEBHOOK': return _post(cfg['url'],{'title':title,'message':message})
     if kind=='SLACK': return _post(cfg['url'],{'text':'*'+title+'*\n'+message})
     if kind=='DISCORD': return _post(cfg['url'],{'content':'**'+title+'**\n'+message})
