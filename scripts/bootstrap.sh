@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=scripts/lib/common.sh
 source "$ROOT/scripts/lib/common.sh"
 require_root
 
@@ -17,12 +16,15 @@ prompt_default TZ "Timezone" "Europe/Rome"
 prompt_default ARCHIVE_ROOT "Archive directory" "/archive/mikrotik"
 
 echo
-echo "Database credentials. Passwords are stored only in root-readable local configuration."
-prompt_secret DB_ROOT_PASSWORD "MariaDB root password"
-prompt_secret NETLOG_APP_PASSWORD "netlog_app database password"
-prompt_secret NETLOG_READER_PASSWORD "netlog_reader database password"
-prompt_secret NETLOG_INGEST_PASSWORD "netlog_ingest database password"
-prompt_secret NETLOG_MAINT_PASSWORD "netlog_maintenance database password"
+echo "Service credentials are generated automatically and stored only in root-readable local configuration."
+DB_ROOT_PASSWORD=""
+if [[ "$MODE" == docker ]]; then
+  DB_ROOT_PASSWORD="$(random_secret 32)"
+fi
+NETLOG_APP_PASSWORD="$(random_secret 32)"
+NETLOG_READER_PASSWORD="$(random_secret 32)"
+NETLOG_INGEST_PASSWORD="$(random_secret 32)"
+NETLOG_MAINT_PASSWORD="$(random_secret 32)"
 SECRET_KEY="$(random_secret 48)"
 
 install -d -m 0750 "$CONFIG_DIR" "$STATE_DIR" "$BACKUP_DIR" "$ARCHIVE_ROOT"
