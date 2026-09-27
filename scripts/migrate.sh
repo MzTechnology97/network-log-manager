@@ -24,4 +24,4 @@ for f in "$ROOT"/database/migrations/*.sql; do
   "${MYSQL_ROOT[@]}" netlog_manager -e "INSERT INTO schema_migrations(version,checksum) VALUES('$version','$checksum');"
 done
 
-"${MYSQL_ROOT[@]}" -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'localhost'; FLUSH PRIVILEGES;"
+"${MYSQL_ROOT[@]}" -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES;"
