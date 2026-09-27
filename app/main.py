@@ -4149,7 +4149,7 @@ def admin_settings_page(request: Request):
             settings={r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
             cur.execute("SELECT id,name,channel_type,enabled FROM notification_channels ORDER BY name")
             channels=cur.fetchall()
-            cur.execute("SELECT * FROM system_alerts ORDER BY resolved_at IS NULL DESC,last_seen_at DESC LIMIT 50")
+            cur.execute("SELECT * FROM system_alerts WHERE resolved_at IS NULL ORDER BY severity DESC,last_seen_at DESC LIMIT 50")
             alerts=cur.fetchall()
     finally: conn.close()
     raw=request.cookies.get(COOKIE_NAME)
