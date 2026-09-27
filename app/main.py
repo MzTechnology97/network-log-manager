@@ -4183,12 +4183,14 @@ def admin_channel_add(request: Request, csrf: str=Form(...), name: str=Form(...)
     if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
     import json
     if channel_type not in {"WEBHOOK","EMAIL","TELEGRAM","SLACK","DISCORD"}: return HTMLResponse("Invalid channel",status_code=400)
-    try: json.loads(configuration_json)
+    try: cfg=json.loads(configuration_json)
     except Exception: return HTMLResponse("Invalid JSON configuration",status_code=400)
+    secret_keys={"password","bot_token","token","secret","api_key"}
+    secret_cfg={k:cfg.pop(k) for k in list(cfg) if k.lower() in secret_keys}
     conn=app_db()
     try:
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO notification_channels(name,channel_type,configuration_json) VALUES(%s,%s,%s)",(name.strip(),channel_type,configuration_json))
+            cur.execute("INSERT INTO notification_channels(name,channel_type,configuration_json,secret_json) VALUES(%s,%s,%s,%s)",(name.strip(),channel_type,json.dumps(cfg),json.dumps(secret_cfg) if secret_cfg else None))
             write_audit(cur,user_id=session["user_id"],username=session["username"],action="NOTIFICATION_CHANNEL_CREATED",category="ADMIN",request=request,target_type="NOTIFICATION_CHANNEL",target_id=str(cur.lastrowid))
             conn.commit()
     finally: conn.close()
