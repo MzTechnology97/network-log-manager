@@ -412,6 +412,12 @@ footer {
 
 
     <section class="card span4">
+        <div class="label">Background Workers</div>
+        <div id="workers" class="event muted">—</div>
+    </section>
+
+
+    <section class="card span4">
         <div class="label">Latest Event</div>
 
         <div id="event" class="event">
@@ -662,6 +668,13 @@ async function refresh() {
         const alerts = d.storage.active_alerts || [];
         document.getElementById("active-alert-detail").textContent =
             alerts.length ? alerts.map(a => a.title).join(" · ") : "Nessun problema attivo";
+
+        const workers = d.services.workers || {};
+        document.getElementById("workers").textContent =
+            Object.entries(workers).map(([name,state]) =>
+                (state.ok ? "● " : "○ ") + name +
+                (state.age_seconds === null ? " (waiting)" : " (" + state.age_seconds.toFixed(0) + "s)")
+            ).join("   ·   ");
 
         const row = d.database.last_row;
 
