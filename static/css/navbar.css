@@ -1,0 +1,219 @@
+.nlm-header {
+    min-height: 68px;
+    padding: 0 28px;
+    background: #0f172a;
+    border-bottom: 1px solid #253047;
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+    align-items: center;
+    gap: 24px;
+    position: relative;
+    z-index: 50;
+}
+
+.nlm-brand,
+.nlm-main-nav a,
+.nlm-account-menu a {
+    color: #cbd5e1;
+    text-decoration: none;
+}
+
+.nlm-brand {
+    justify-self: start;
+    font-size: 18px;
+    font-weight: 700;
+    color: #e5e7eb;
+}
+
+.nlm-brand:hover,
+.nlm-main-nav a:hover,
+.nlm-account-menu a:hover {
+    color: #fff;
+}
+
+.nlm-main-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.nlm-main-nav a {
+    padding: 9px 12px;
+    border-radius: 7px;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.nlm-main-nav a:hover {
+    background: #172033;
+}
+
+.nlm-main-nav a.active {
+    color: #fff;
+    background: #1e293b;
+}
+
+.nlm-account-menu {
+    justify-self: end;
+    position: relative;
+}
+
+.nlm-account-menu summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 11px;
+    border-radius: 7px;
+    color: #e5e7eb;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.nlm-account-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.nlm-account-menu summary:hover,
+.nlm-account-menu[open] summary {
+    background: #172033;
+}
+
+.nlm-account-name {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.nlm-chevron {
+    color: #94a3b8;
+    font-size: 11px;
+    transition: transform .15s ease;
+}
+
+.nlm-account-menu[open] .nlm-chevron {
+    transform: rotate(180deg);
+}
+
+.nlm-account-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 250px;
+    padding: 8px;
+    background: #111827;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    box-shadow: 0 18px 45px rgba(0, 0, 0, .35);
+}
+
+.nlm-account-menu[open] .nlm-account-dropdown {
+    display: block;
+}
+
+.nlm-account-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 11px;
+}
+
+.nlm-account-info strong {
+    color: #f8fafc;
+    font-size: 14px;
+}
+
+.nlm-account-info span {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.nlm-menu-separator {
+    height: 1px;
+    margin: 6px 3px;
+    background: #253047;
+}
+
+.nlm-account-dropdown a {
+    display: block;
+    padding: 9px 11px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.nlm-account-dropdown a:hover {
+    background: #1e293b;
+}
+
+.nlm-account-dropdown form {
+    margin: 0;
+}
+
+.nlm-logout-button {
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #fca5a5;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.nlm-logout-button:hover {
+    background: #3f1d25;
+    color: #fecaca;
+}
+
+@media (max-width: 900px) {
+    .nlm-header {
+        grid-template-columns: 1fr auto;
+        gap: 10px 16px;
+        padding: 12px 18px;
+    }
+
+    .nlm-main-nav {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    .nlm-account-menu {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}
+
+@media (max-width: 520px) {
+    .nlm-header {
+        padding: 10px 12px;
+    }
+
+    .nlm-brand {
+        font-size: 15px;
+    }
+
+    .nlm-account-name {
+        max-width: 105px;
+    }
+
+    .nlm-main-nav {
+        gap: 2px;
+    }
+
+    .nlm-main-nav a {
+        padding: 8px 9px;
+        font-size: 13px;
+    }
+
+    .nlm-account-dropdown {
+        width: min(250px, calc(100vw - 24px));
+    }
+}
