@@ -12,6 +12,8 @@ if ! command_exists docker; then
   apt-get install -y docker.io docker-compose-plugin || apt-get install -y docker.io docker-compose
 fi
 systemctl enable --now docker
+apt-get update
+apt-get install -y zstd util-linux openssl
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE=(docker compose)
@@ -93,5 +95,12 @@ log "Starting application and syslog ingestion"
 echo
 log "Create the initial Administrator account."
 "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec app python create-admin.py
+
+install -d -m 0755 /opt/netlog-manager/scripts
+install -m 0755 "$ROOT/scripts/archive-docker.sh" /opt/netlog-manager/scripts/archive-docker.sh
+install -m 0644 "$ROOT/systemd/netlog-docker-archive.service" /etc/systemd/system/netlog-docker-archive.service
+install -m 0644 "$ROOT/systemd/netlog-docker-archive.timer" /etc/systemd/system/netlog-docker-archive.timer
+systemctl daemon-reload
+systemctl enable --now netlog-docker-archive.timer
 
 log "Docker installation completed."
