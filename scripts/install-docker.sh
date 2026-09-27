@@ -98,9 +98,12 @@ log "Create the initial Administrator account."
 
 install -d -m 0755 /opt/netlog-manager/scripts
 install -m 0755 "$ROOT/scripts/archive-docker.sh" /opt/netlog-manager/scripts/archive-docker.sh
+install -m 0755 "$ROOT/scripts/rotate-live-log-docker.sh" /opt/netlog-manager/scripts/rotate-live-log-docker.sh
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.service" /etc/systemd/system/netlog-docker-archive.service
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.timer" /etc/systemd/system/netlog-docker-archive.timer
+install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.service" /etc/systemd/system/netlog-docker-logrotate.service
+install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.timer" /etc/systemd/system/netlog-docker-logrotate.timer
 systemctl daemon-reload
-systemctl enable --now netlog-docker-archive.timer
+systemctl enable --now netlog-docker-archive.timer netlog-docker-logrotate.timer
 
 log "Docker installation completed."
