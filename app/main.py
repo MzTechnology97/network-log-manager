@@ -4158,16 +4158,14 @@ def admin_settings_page(request: Request):
     return templates.TemplateResponse(request=request,name="settings.html",context={"session":session,"csrf_token":csrf_token(raw),"settings":settings,"channels":channels,"alerts":alerts,"storages":list_targets(),"message":request.query_params.get("message"),"error":None})
 
 @app.post("/admin/settings")
-def admin_settings_save(request: Request, csrf: str=Form(...), retention_days: int=Form(...), archive_after_days: int=Form(...), storage_warning_percent: int=Form(...), storage_critical_percent: int=Form(...), ingestion_stale_minutes: int=Form(...), alert_repeat_minutes: int=Form(...), external_storage_path: str=Form(...), external_storage_type: str=Form(...)):
+def admin_settings_save(request: Request, csrf: str=Form(...), retention_days: int=Form(...), archive_after_days: int=Form(...), storage_warning_percent: int=Form(...), storage_critical_percent: int=Form(...), ingestion_stale_minutes: int=Form(...), alert_repeat_minutes: int=Form(...)):
     session=get_session(request)
     if not session: return RedirectResponse("/login",status_code=303)
     if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
     if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
     if retention_days<1 or archive_after_days<1 or archive_after_days>=retention_days or not (1<=storage_warning_percent<storage_critical_percent<=99) or ingestion_stale_minutes<1 or alert_repeat_minutes<1:
         return RedirectResponse("/admin/settings?message=Invalid+settings",status_code=303)
-    allowed={"LOCAL","NFS","SMB","SFTP","S3"}
-    if external_storage_type not in allowed: return HTMLResponse("Invalid storage type",status_code=400)
-    values={"retention_days":retention_days,"archive_after_days":archive_after_days,"storage_warning_percent":storage_warning_percent,"storage_critical_percent":storage_critical_percent,"ingestion_stale_minutes":ingestion_stale_minutes,"alert_repeat_minutes":alert_repeat_minutes,"external_storage_path":external_storage_path.strip(),"external_storage_type":external_storage_type}
+    values={"retention_days":retention_days,"archive_after_days":archive_after_days,"storage_warning_percent":storage_warning_percent,"storage_critical_percent":storage_critical_percent,"ingestion_stale_minutes":ingestion_stale_minutes,"alert_repeat_minutes":alert_repeat_minutes}
     conn=app_db()
     try:
         with conn.cursor() as cur:
