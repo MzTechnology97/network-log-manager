@@ -1,7 +1,7 @@
 import os, shutil, time
 from pathlib import Path
 from .database import app_db
-from .remote_storage import decrypt_secret, integrity_test, browse, upload_file
+from .remote_storage import decrypt_secret, integrity_test, browse, upload_file, download_file
 
 def _cfg(row):
     return {"type":row["storage_type"],"host":row.get("host") or "","port":row.get("port") or "",
@@ -70,7 +70,7 @@ def health_check_all(deep=False):
 def upload_to_replicas(local_path,relative_path,sha256=None):
     results=[]
     for row in list_targets(True):
-        if row["role"]!="REPLICA": continue
+        if row["storage_type"]=="LOCAL": continue
         conn=app_db()
         try:
             with conn.cursor() as cur:
@@ -92,3 +92,29 @@ def upload_to_replicas(local_path,relative_path,sha256=None):
         finally: conn.close()
         results.append({"storage_id":row["id"],"name":row["name"],"status":status,"error":error})
     return results
+
+
+def materialize_from_fallback(relative_path, local_path, expected_sha256=None):
+    import hashlib
+    errors=[]
+    for row in read_order():
+        try:
+            if row["storage_type"]=="LOCAL":
+                candidate=Path(row["base_path"])/relative_path
+                if candidate.is_file():
+                    if Path(local_path).resolve()!=candidate.resolve():
+                        Path(local_path).parent.mkdir(parents=True,exist_ok=True)
+                        import shutil; shutil.copy2(candidate,local_path)
+                    return {"storage_id":row["id"],"name":row["name"]}
+                continue
+            download_file(_cfg(row),_secret(row),relative_path,local_path)
+            if expected_sha256:
+                h=hashlib.sha256()
+                with Path(local_path).open("rb") as fh:
+                    for chunk in iter(lambda:fh.read(8*1024*1024),b""): h.update(chunk)
+                if h.hexdigest().lower()!=expected_sha256.lower():
+                    Path(local_path).unlink(missing_ok=True); raise RuntimeError("SHA-256 mismatch")
+            return {"storage_id":row["id"],"name":row["name"]}
+        except Exception as exc:
+            errors.append(row["name"]+": "+str(exc))
+    raise FileNotFoundError("Archive unavailable on all fallback storages: "+"; ".join(errors))
