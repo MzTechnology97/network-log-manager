@@ -13,7 +13,7 @@ if ! command_exists docker; then
 fi
 systemctl enable --now docker
 apt-get update
-apt-get install -y zstd util-linux openssl
+apt-get install -y zstd util-linux openssl gzip
 
 if docker compose version >/dev/null 2>&1; then
   COMPOSE=(docker compose)
