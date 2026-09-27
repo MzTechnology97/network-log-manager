@@ -91,6 +91,22 @@ jobs:
           for f in database/migrations/*.sql; do docker compose exec -T db mariadb -uroot -pci-root-password < "$f"; done
           docker compose exec -T db mariadb -uroot -pci-root-password -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; CALL syslogdb.CreateFutureTables();"
           docker compose up -d app syslog proxy
+          for i in $(seq 1 30); do
+            app_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$(docker compose ps -q app)" 2>/dev/null || echo starting)"
+            [[ "$app_health" == healthy ]] && break
+            [[ "$app_health" == unhealthy ]] && { docker compose logs app; exit 1; }
+            sleep 2
+          done
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q app)")" == healthy ]]
+          test -s static/css/navbar.css
+          docker compose exec -T app test -s /opt/netlog-manager/static/css/navbar.css
+          printf '<134>Sep 27 18:00:00 router firewall,info connection-state:new,snat srcnat: in:bridge out:ether1, connection-state:new,snat proto UDP, 192.168.2.55:59565->8.8.4.4:443, NAT (192.168.2.55:59565->82.63.3.5:59565)->8.8.4.4:443\n' >/dev/udp/127.0.0.1/5514 || true
+          for i in $(seq 1 20); do
+            count="$(docker compose exec -T db mariadb -uroot -pci-root-password -N -B syslogdb -e "SELECT COUNT(*) FROM mikrotik_logs_$(date +%Y_%m_%d);" 2>/dev/null || echo 0)"
+            [[ "$count" =~ ^[0-9]+$ ]] && (( count > 0 )) && break
+            sleep 1
+          done
+          [[ "$count" =~ ^[0-9]+$ ]] && (( count > 0 ))
           for i in $(seq 1 30); do curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null && break; sleep 2; done
           curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null
           docker compose ps
