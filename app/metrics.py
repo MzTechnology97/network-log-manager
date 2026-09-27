@@ -274,6 +274,20 @@ def calculate_rate(db):
     return round(delta / elapsed, 1)
 
 
+
+def worker_metrics():
+    root=Path("/var/lib/netlog-manager/workers")
+    limits={"archive-cache":7200,"export-worker":90,"export-cleanup":172800,"monitor":300}
+    now=time.time(); result={}
+    for name,limit in limits.items():
+        p=root/(name+".heartbeat")
+        try:
+            age=max(0,now-float(p.read_text().strip()))
+            result[name]={"ok":age<=limit,"age_seconds":round(age,1)}
+        except Exception:
+            result[name]={"ok":False,"age_seconds":None}
+    return result
+
 def collect_dashboard():
     now = datetime.now()
 
@@ -362,6 +376,7 @@ def collect_dashboard():
         },
         "services": {
             "mariadb": bool(db.get("connected")),
+            "workers": worker_metrics(),
             "syslog_listener": listener_ok,
             "syslog_listener_host": listener_host,
             "syslog_listener_port": listener_port,
