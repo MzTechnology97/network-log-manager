@@ -69,12 +69,16 @@ chmod 0755 /opt/netlog-manager
 chmod 0644 /opt/netlog-manager/app/*.py
 
 log "Installing application systemd units"
-for unit in   netlog-manager.service   netlog-archive-cache.service netlog-archive-cache.timer   netlog-export-worker.service netlog-export-worker.path   netlog-export-cleanup.service netlog-export-cleanup.timer
+for unit in   netlog-manager.service   netlog-archive-cache.service netlog-archive-cache.timer   netlog-export-worker.service netlog-export-worker.path   netlog-export-cleanup.service netlog-export-cleanup.timer \
+  netlog-update.service netlog-update.timer
 do
   install -m 0644 "$ROOT/systemd/$unit" "/etc/systemd/system/$unit"
 done
 systemctl daemon-reload
 systemctl enable netlog-manager.service netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer
+install -d -o root -g root -m 0755 /opt/netlog-manager/scripts
+rsync -a --delete "$ROOT/scripts/" /opt/netlog-manager/scripts/
+# Automatic updates remain disabled until a release channel has been explicitly enabled.
 
 log "Validating application import"
 /opt/netlog-manager/venv/bin/python -m compileall -q /opt/netlog-manager/app /opt/netlog-manager/create-admin.py
