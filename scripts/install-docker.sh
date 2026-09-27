@@ -44,11 +44,16 @@ chmod 0600 "$STATE_DIR/docker/.env"
 
 if [[ ! -s "$STATE_DIR/docker/tls/netlog-manager.key" || ! -s "$STATE_DIR/docker/tls/netlog-manager.crt" ]]; then
   log "Generating initial self-signed Docker TLS certificate"
+  if [[ "$HOSTNAME_FQDN" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    TLS_SAN="IP:$HOSTNAME_FQDN"
+  else
+    TLS_SAN="DNS:$HOSTNAME_FQDN"
+  fi
   openssl req -x509 -nodes -newkey rsa:3072 -sha256 -days 825 \
     -keyout "$STATE_DIR/docker/tls/netlog-manager.key" \
     -out "$STATE_DIR/docker/tls/netlog-manager.crt" \
     -subj "/CN=$HOSTNAME_FQDN" \
-    -addext "subjectAltName=DNS:$HOSTNAME_FQDN"
+    -addext "subjectAltName=$TLS_SAN"
   chmod 0600 "$STATE_DIR/docker/tls/netlog-manager.key"
   chmod 0644 "$STATE_DIR/docker/tls/netlog-manager.crt"
 fi
