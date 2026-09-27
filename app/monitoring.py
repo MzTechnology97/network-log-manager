@@ -54,9 +54,21 @@ def _record(key,severity,title,message,repeat_minutes):
         for channel in channels:
             try:
                 selected=json.loads(channel.get('event_types_json') or '[]')
+                # An explicit subscription list is authoritative. Legacy channels
+                # with NULL/empty subscriptions keep receiving all events.
                 if selected and key not in selected: continue
-                send_channel(channel,title,message); delivered=True
-            except Exception: pass
+                send_channel(channel,title,message)
+                delivered=True
+                with conn.cursor() as cur:
+                    cur.execute("""INSERT INTO notification_delivery_log(alert_id,channel_id,event_type,status,attempted_at,error_message)
+                                   VALUES(%s,%s,%s,'SENT',NOW(3),NULL)""",(alert_id,channel['id'],key)); conn.commit()
+            except Exception as exc:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("""INSERT INTO notification_delivery_log(alert_id,channel_id,event_type,status,attempted_at,error_message)
+                                       VALUES(%s,%s,%s,'FAILED',NOW(3),%s)""",(alert_id,channel['id'],key,str(exc)[:1000])); conn.commit()
+                except Exception:
+                    pass
         if delivered:
             with conn.cursor() as cur:
                 cur.execute('UPDATE system_alerts SET notification_sent_at=NOW(3) WHERE id=%s',(alert_id,)); conn.commit()
