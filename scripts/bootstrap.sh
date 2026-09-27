@@ -16,16 +16,22 @@ prompt_default TZ "Timezone" "Europe/Rome"
 prompt_default ARCHIVE_ROOT "Archive directory" "/archive/mikrotik"
 
 echo
-echo "Service credentials are generated automatically and stored only in root-readable local configuration."
-DB_ROOT_PASSWORD=""
-if [[ "$MODE" == docker ]]; then
-  DB_ROOT_PASSWORD="$(random_secret 32)"
+if [[ -s "$CONFIG_DIR/secrets.env" ]]; then
+  echo "Existing service credentials found; reusing them for installation recovery."
+  # shellcheck disable=SC1090
+  source "$CONFIG_DIR/secrets.env"
+else
+  echo "Service credentials are generated automatically and stored only in root-readable local configuration."
+  DB_ROOT_PASSWORD=""
+  if [[ "$MODE" == docker ]]; then
+    DB_ROOT_PASSWORD="$(random_secret 32)"
+  fi
+  NETLOG_APP_PASSWORD="$(random_secret 32)"
+  NETLOG_READER_PASSWORD="$(random_secret 32)"
+  NETLOG_INGEST_PASSWORD="$(random_secret 32)"
+  NETLOG_MAINT_PASSWORD="$(random_secret 32)"
+  SECRET_KEY="$(random_secret 48)"
 fi
-NETLOG_APP_PASSWORD="$(random_secret 32)"
-NETLOG_READER_PASSWORD="$(random_secret 32)"
-NETLOG_INGEST_PASSWORD="$(random_secret 32)"
-NETLOG_MAINT_PASSWORD="$(random_secret 32)"
-SECRET_KEY="$(random_secret 48)"
 
 install -d -m 0750 "$CONFIG_DIR" "$STATE_DIR" "$BACKUP_DIR" "$ARCHIVE_ROOT"
 cat >"$CONFIG_DIR/install.env" <<EOF
