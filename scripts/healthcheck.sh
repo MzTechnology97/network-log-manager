@@ -15,6 +15,8 @@ if [[ "$MODE" == docker ]]; then
     [[ -n "$id" ]] || die "Docker service $service is missing."
     state="$(docker inspect -f '{{.State.Status}}' "$id")"
     [[ "$state" == running ]] || die "Docker service $service is not running: $state"
+    health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")"
+    [[ "$health" != "unhealthy" ]] || die "Docker service $service is unhealthy."
   done
   "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T db mariadb-admin ping -uroot "-p$DB_ROOT_PASSWORD" --silent >/dev/null
   "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T db mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='netlog_manager' AND table_name='schema_migrations';" | grep -qx 1
