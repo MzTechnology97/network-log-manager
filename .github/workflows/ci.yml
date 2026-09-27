@@ -130,6 +130,9 @@ jobs:
             sleep 1
           done
           [[ "$local_ts" == "2026-09-27 20:00:00" ]]
+          # A pre-created future table must never make ingestion appear stale.
+          docker compose exec -T db mariadb -uroot -pci-root-password syslogdb -e "CREATE TABLE IF NOT EXISTS mikrotik_logs_2099_12_31 LIKE mikrotik_logs_2026_09_27; INSERT INTO mikrotik_logs_2026_09_27(timestamp,source_ip,source_port,dest_ip,dest_port,protocol,nat_source_ip,nat_source_port) VALUES(NOW(3),'192.168.2.57',59567,'1.0.0.1',443,'TCP','82.63.3.5',59567);"
+          docker compose exec -T app python -c "from app.monitoring import run_checks; active=run_checks(); assert 'ingestion_stale' not in active, active"
           for i in $(seq 1 30); do curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null && break; sleep 2; done
           curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null
           docker compose ps
