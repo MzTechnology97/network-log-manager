@@ -32,6 +32,8 @@ services:
       ARCHIVE_ROOT: /archive/mikrotik
       EXPORT_ROOT: /var/cache/netlog-manager/exports
       LIVE_LOG: /var/log/network.log
+      SYSLOG_LISTENER_HOST: syslog
+      SYSLOG_LISTENER_PORT: "5514"
     volumes:
       - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
       - live-log:/var/log:ro
