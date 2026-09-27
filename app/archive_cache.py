@@ -117,16 +117,17 @@ def cache_is_valid(
     if manifest["COMPLETE"] != "1":
         return False, "cache incompleta"
 
-    if manifest["SOURCE"] != str(archive_path):
-        return False, "sorgente differente"
-
-    try:
-        source_bytes = archive_path.stat().st_size
-    except FileNotFoundError:
-        return False, "archivio sorgente assente"
-
-    if manifest["SOURCE_BYTES"] != str(source_bytes):
-        return False, "dimensione sorgente differente"
+    # With multi-storage the physical source may move between PRIMARY and
+    # fallback targets. The content SHA is authoritative when available.
+    if expected_sha256 is None:
+        if manifest["SOURCE"] != str(archive_path):
+            return False, "sorgente differente"
+        try:
+            source_bytes = archive_path.stat().st_size
+        except FileNotFoundError:
+            return False, "archivio sorgente assente"
+        if manifest["SOURCE_BYTES"] != str(source_bytes):
+            return False, "dimensione sorgente differente"
 
     if expected_rows is not None:
         if manifest["ROWS"] != str(expected_rows):
