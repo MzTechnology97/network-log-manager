@@ -118,3 +118,32 @@ def materialize_from_fallback(relative_path, local_path, expected_sha256=None):
         except Exception as exc:
             errors.append(row["name"]+": "+str(exc))
     raise FileNotFoundError("Archive unavailable on all fallback storages: "+"; ".join(errors))
+
+
+def resolve_archive_source(relative_path, local_catalog_path, expected_sha256=None):
+    """Resolve cache input in PRIMARY -> fallback order, verifying SHA-256."""
+    import hashlib
+    local_catalog_path=Path(local_catalog_path)
+    errors=[]
+    for row in read_order():
+        try:
+            if row["storage_type"]=="LOCAL":
+                candidate=Path(row["base_path"])/relative_path
+                if not candidate.is_file(): raise FileNotFoundError(str(candidate))
+            else:
+                candidate=Path("/var/cache/netlog-manager/sources")/str(row["id"])/relative_path
+                candidate.parent.mkdir(parents=True,exist_ok=True)
+                download_file(_cfg(row),_secret(row),relative_path,candidate)
+            if expected_sha256:
+                h=hashlib.sha256()
+                with candidate.open("rb") as fh:
+                    for chunk in iter(lambda:fh.read(8*1024*1024),b""): h.update(chunk)
+                if h.hexdigest().lower()!=expected_sha256.lower():
+                    if row["storage_type"]!="LOCAL": candidate.unlink(missing_ok=True)
+                    raise RuntimeError("SHA-256 mismatch")
+            return candidate,row
+        except Exception as exc:
+            errors.append(row["name"]+": "+str(exc))
+    # Backward-compatible local catalog path is a final safety fallback.
+    if local_catalog_path.is_file(): return local_catalog_path,{"id":None,"name":"catalog-local"}
+    raise FileNotFoundError("Archive unavailable on primary and fallbacks: "+"; ".join(errors))
