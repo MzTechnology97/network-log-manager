@@ -44,7 +44,7 @@ jobs:
                       if not match:
                           continue
                       value = match.group(2).strip()
-                      if not value or "$" in value or "random_secret" in value:
+                      if not value or "$" in value or "random_secret" in value or value in ("''", '""'):
                           continue
                       bad.append(f"{path}:{no}:{match.group(1)}")
           if bad:
