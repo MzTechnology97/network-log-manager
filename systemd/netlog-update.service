@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/netlog-manager/scripts/update.sh
+ExecStart=/opt/netlog-manager/scripts/update.sh --automatic
 Nice=10
 PrivateTmp=true
 NoNewPrivileges=true
