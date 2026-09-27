@@ -66,10 +66,14 @@ log "Provisioning Docker databases and least-privilege users"
 APP_PW="$NETLOG_APP_PASSWORD" READER_PW="$NETLOG_READER_PASSWORD" INGEST_PW="$NETLOG_INGEST_PASSWORD" MAINT_PW="$NETLOG_MAINT_PASSWORD" "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec -T db mariadb -uroot "-p$DB_ROOT_PASSWORD" <<SQL
 CREATE DATABASE IF NOT EXISTS netlog_manager CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'netlog_app'@'%' IDENTIFIED BY '$NETLOG_APP_PASSWORD';
-CREATE USER IF NOT EXISTS 'netlog_reader'@'%' IDENTIFIED BY '$NETLOG_READER_PASSWORD';
-CREATE USER IF NOT EXISTS 'netlog_ingest'@'%' IDENTIFIED BY '$NETLOG_INGEST_PASSWORD';
-CREATE USER IF NOT EXISTS 'netlog_maintenance'@'%' IDENTIFIED BY '$NETLOG_MAINT_PASSWORD';
+CREATE USER IF NOT EXISTS 'netlog_app'@'%';
+ALTER USER 'netlog_app'@'%' IDENTIFIED BY '$NETLOG_APP_PASSWORD';
+CREATE USER IF NOT EXISTS 'netlog_reader'@'%';
+ALTER USER 'netlog_reader'@'%' IDENTIFIED BY '$NETLOG_READER_PASSWORD';
+CREATE USER IF NOT EXISTS 'netlog_ingest'@'%';
+ALTER USER 'netlog_ingest'@'%' IDENTIFIED BY '$NETLOG_INGEST_PASSWORD';
+CREATE USER IF NOT EXISTS 'netlog_maintenance'@'%';
+ALTER USER 'netlog_maintenance'@'%' IDENTIFIED BY '$NETLOG_MAINT_PASSWORD';
 GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%';
 GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%';
 GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%';
