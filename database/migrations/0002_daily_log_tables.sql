@@ -3,8 +3,9 @@ USE syslogdb;
 DROP PROCEDURE IF EXISTS CreateFutureTables;
 DELIMITER //
 CREATE PROCEDURE CreateFutureTables()
+SQL SECURITY DEFINER
 BEGIN
-    DECLARE i INT DEFAULT 1;
+    DECLARE i INT DEFAULT 0;
     WHILE i < 7 DO
         SET @table_date = DATE_FORMAT(DATE_ADD(CURDATE(), INTERVAL i DAY), '%Y_%m_%d');
         SET @table_name = CONCAT('mikrotik_logs_', @table_date);
@@ -25,7 +26,9 @@ BEGIN
           'KEY `idx_source_time` (`source_ip`,`timestamp`)',
           ') ENGINE=InnoDB ROW_FORMAT=DYNAMIC'
         );
-        PREPARE stmt FROM @query; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+        PREPARE stmt FROM @query;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
         SET i = i + 1;
     END WHILE;
 END//
