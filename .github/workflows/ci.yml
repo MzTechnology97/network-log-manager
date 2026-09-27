@@ -73,16 +73,7 @@ jobs:
         run: docker compose build app syslog proxy
       - name: Docker syslog configuration syntax
         env: *docker-env
-        run: |
-          docker compose run --rm --no-deps --entrypoint sh syslog -c '/usr/local/bin/netlog-syslog-entrypoint --version >/dev/null 2>&1 || true'
-          docker compose run --rm --no-deps --entrypoint sh syslog -c 'python3 - <<"PY"
-          import os
-          from pathlib import Path
-          src=Path("/etc/syslog-ng/syslog-ng.conf.template").read_text()
-          pw=os.environ["NETLOG_INGEST_PASSWORD"].replace("\\","\\\\").replace(chr(34),"\\\"")
-          Path("/tmp/syslog-ng.conf").write_text(src.replace("@@NETLOG_INGEST_PASSWORD@@",pw))
-          PY
-          syslog-ng -s -f /tmp/syslog-ng.conf'
+        run: docker compose run --rm --no-deps syslog --check
       - name: Docker stack integration
         env: *docker-env
         run: |
