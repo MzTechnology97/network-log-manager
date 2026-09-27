@@ -57,6 +57,11 @@ if [[ -n "$deployed_revision" ]] && git cat-file -e "$deployed_revision^{commit}
 fi
 
 if [[ "$MODE" == docker ]]; then
+  # The application image runs as uid=10001 and its system group is gid=999.
+  # Repair only the archive root so integrity probes can write temporary files;
+  # do not recursively alter ownership of existing archived data.
+  source "$CONFIG_DIR/install.env"
+  install -d -o 10001 -g 999 -m 0750 "$ARCHIVE_ROOT"
   sanitize_compose_environment
   backup_path="$("$REPO/scripts/backup-docker.sh" | tail -n1)"
 else
