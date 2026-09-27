@@ -109,11 +109,12 @@ Application, reader, ingestion and maintenance database identities are separate.
 
 ## Documentation
 
-Detailed documentation is maintained in `docs/` and can also be published into the GitHub Wiki:
+Detailed documentation is maintained directly in `docs/`:
 
 - [Installation](docs/installation.md)
 - [Architecture](docs/architecture.md)
 - [Configuration and files](docs/configuration.md)
+- [MikroTik CGNAT and syslog logging / Configurazione MikroTik CGNAT e syslog](docs/mikrotik-cgnat-syslog.md)
 - [Operations](docs/operations.md)
 - [Database and retention](docs/database-retention.md)
 - [Updates and recovery](docs/updates-recovery.md)
