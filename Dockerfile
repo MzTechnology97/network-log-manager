@@ -7,6 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY templates ./templates
 COPY create-admin.py .
+COPY docker/worker-entrypoint.sh /usr/local/bin/netlog-worker
+RUN chmod 0755 /usr/local/bin/netlog-worker
 RUN useradd --system --uid 10001 --home /var/lib/netlog-manager --shell /usr/sbin/nologin netlog && \
     mkdir -p /var/lib/netlog-manager /var/cache/netlog-manager/exports /var/cache/netlog-manager/history && \
     chown -R netlog:netlog /var/lib/netlog-manager /var/cache/netlog-manager
