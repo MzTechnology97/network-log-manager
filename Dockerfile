@@ -16,5 +16,5 @@ RUN useradd --system --uid 10001 --home /var/lib/netlog-manager --shell /usr/sbi
     chown -R netlog:netlog /var/lib/netlog-manager /var/cache/netlog-manager
 USER netlog
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["python","/opt/netlog-manager/healthcheck.py"]
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6 CMD ["python","/opt/netlog-manager/healthcheck.py"]
 CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8080","--workers","1","--proxy-headers"]
