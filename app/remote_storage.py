@@ -18,7 +18,7 @@ def decrypt_secret(value):
 
 def _safe_folder(folder):
     folder=(folder or "").strip().replace("\\","/")
-    if ".." in folder.split("/"): raise ValueError("Invalid folder")
+    if ".." in folder.split("/") or any(ch in folder for ch in ['"',";","\\n","\\r"]): raise ValueError("Invalid folder")
     return folder.strip("/")
 
 def _smb_cmd(cfg, secret, command):
