@@ -22,8 +22,10 @@ command -v zstd >/dev/null || die "zstd is required on the Docker host."
 command -v flock >/dev/null || die "flock is required on the Docker host."
 exec 9>"$STATE_DIR/docker/archive.lock"
 flock -n 9 || die "Another Docker archive job is running."
-year="$(date +%Y)"
-cutoff="mikrotik_logs_${year}_01_01"
+archive_after_days="$(db -N -B netlog_manager -e "SELECT COALESCE((SELECT setting_value FROM settings WHERE setting_key='archive_after_days' LIMIT 1),'365');" 2>/dev/null || echo 365)"
+[[ "$archive_after_days" =~ ^[1-9][0-9]*$ ]] || archive_after_days=365
+cutoff_date="$(date -d "$archive_after_days days ago" +%Y_%m_%d)"
+cutoff="mikrotik_logs_${cutoff_date}"
 mapfile -t tables < <(db -N -B -e "SELECT table_name FROM information_schema.tables WHERE table_schema='$DB' AND table_name REGEXP '^mikrotik_logs_[0-9]{4}_[0-9]{2}_[0-9]{2}$' AND table_name < '$cutoff' ORDER BY table_name")
 (( DRY_RUN )) && { printf '%s\n' "${tables[@]}"; exit 0; }
 done_count=0
@@ -54,7 +56,7 @@ COMPRESSED_BYTES=$bytes
 UNCOMPRESSED_BYTES=$uncompressed_bytes
 SHA256=$hash
 ARCHIVED_AT=$(date --iso-8601=seconds)
-RETENTION_POLICY=current_year
+RETENTION_POLICY=archive_after_${archive_after_days}_days
 EOF
   printf '%s  %s\n' "$hash" "$(basename "$final")" >"$sha"
   (cd "$dir" && sha256sum -c "$(basename "$sha")" >/dev/null)

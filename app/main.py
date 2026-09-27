@@ -4134,3 +4134,81 @@ def account_security_disable(
         status_code=303,
     )
 
+
+
+@app.get("/admin/settings", response_class=HTMLResponse)
+def admin_settings_page(request: Request):
+    session=get_session(request)
+    if not session: return RedirectResponse("/login",status_code=303)
+    if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT setting_key,setting_value FROM settings")
+            settings={r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
+            cur.execute("SELECT id,name,channel_type,enabled FROM notification_channels ORDER BY name")
+            channels=cur.fetchall()
+            cur.execute("SELECT * FROM system_alerts ORDER BY resolved_at IS NULL DESC,last_seen_at DESC LIMIT 50")
+            alerts=cur.fetchall()
+    finally: conn.close()
+    raw=request.cookies.get(COOKIE_NAME)
+    return templates.TemplateResponse(request=request,name="settings.html",context={"session":session,"csrf_token":csrf_token(raw),"settings":settings,"channels":channels,"alerts":alerts,"message":request.query_params.get("message"),"error":None})
+
+@app.post("/admin/settings")
+def admin_settings_save(request: Request, csrf: str=Form(...), retention_days: int=Form(...), archive_after_days: int=Form(...), storage_warning_percent: int=Form(...), storage_critical_percent: int=Form(...), ingestion_stale_minutes: int=Form(...), alert_repeat_minutes: int=Form(...), external_storage_path: str=Form(...), external_storage_type: str=Form(...)):
+    session=get_session(request)
+    if not session: return RedirectResponse("/login",status_code=303)
+    if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    if retention_days<1 or archive_after_days<1 or archive_after_days>=retention_days or not (1<=storage_warning_percent<storage_critical_percent<=99) or ingestion_stale_minutes<1 or alert_repeat_minutes<1:
+        return RedirectResponse("/admin/settings?message=Invalid+settings",status_code=303)
+    allowed={"LOCAL","NFS","SMB","SFTP","S3"}
+    if external_storage_type not in allowed: return HTMLResponse("Invalid storage type",status_code=400)
+    values={"retention_days":retention_days,"archive_after_days":archive_after_days,"storage_warning_percent":storage_warning_percent,"storage_critical_percent":storage_critical_percent,"ingestion_stale_minutes":ingestion_stale_minutes,"alert_repeat_minutes":alert_repeat_minutes,"external_storage_path":external_storage_path.strip(),"external_storage_type":external_storage_type}
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            for key,value in values.items():
+                cur.execute("INSERT INTO settings(setting_key,setting_value) VALUES(%s,%s) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)",(key,str(value)))
+            write_audit(cur,user_id=session["user_id"],username=session["username"],action="SETTINGS_UPDATED",category="ADMIN",request=request,details="Operational settings updated")
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Settings+saved",status_code=303)
+
+@app.post("/admin/settings/channels")
+def admin_channel_add(request: Request, csrf: str=Form(...), name: str=Form(...), channel_type: str=Form(...), configuration_json: str=Form(...), secret_json: str=Form('{}')):
+    session=get_session(request)
+    if not session: return RedirectResponse("/login",status_code=303)
+    if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    import json
+    if channel_type not in {"WEBHOOK","EMAIL","TELEGRAM","SLACK","DISCORD"}: return HTMLResponse("Invalid channel",status_code=400)
+    try: cfg=json.loads(configuration_json); supplied_secrets=json.loads(secret_json or '{}')
+    except Exception: return HTMLResponse("Invalid JSON configuration",status_code=400)
+    if not isinstance(cfg,dict) or not isinstance(supplied_secrets,dict): return HTMLResponse("JSON objects required",status_code=400)
+    secret_keys={"password","bot_token","token","secret","api_key"}
+    secret_cfg={k:cfg.pop(k) for k in list(cfg) if k.lower() in secret_keys}
+    secret_cfg.update(supplied_secrets)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO notification_channels(name,channel_type,configuration_json,secret_json) VALUES(%s,%s,%s,%s)",(name.strip(),channel_type,json.dumps(cfg),json.dumps(secret_cfg) if secret_cfg else None))
+            write_audit(cur,user_id=session["user_id"],username=session["username"],action="NOTIFICATION_CHANNEL_CREATED",category="ADMIN",request=request,target_type="NOTIFICATION_CHANNEL",target_id=str(cur.lastrowid))
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+channel+created",status_code=303)
+
+@app.post("/admin/settings/channels/{channel_id}/delete")
+def admin_channel_delete(channel_id: int, request: Request, csrf: str=Form(...)):
+    session=get_session(request)
+    if not session: return RedirectResponse("/login",status_code=303)
+    if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM notification_channels WHERE id=%s",(channel_id,))
+            write_audit(cur,user_id=session["user_id"],username=session["username"],action="NOTIFICATION_CHANNEL_DELETED",category="ADMIN",request=request,target_type="NOTIFICATION_CHANNEL",target_id=str(channel_id))
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+channel+deleted",status_code=303)

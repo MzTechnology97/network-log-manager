@@ -9,7 +9,8 @@ from pathlib import Path
 import psutil
 
 from .config import ENV
-from .database import syslog_db
+from .database import app_db, syslog_db
+from .monitoring import settings as operational_settings
 
 
 LIVE_LOG = Path(
@@ -299,7 +300,22 @@ def collect_dashboard():
 
     load1, load5, load15 = os.getloadavg()
 
+    cfg = operational_settings()
+    archive_path = Path(cfg.get('external_storage_path') or str(ARCHIVE_ROOT))
+    try:
+        archive_disk = shutil.disk_usage(archive_path)
+    except OSError:
+        archive_disk = None
     archive_bytes = archive_size()
+    open_alerts = 0
+    try:
+        alert_conn = app_db()
+        with alert_conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS c FROM system_alerts WHERE resolved_at IS NULL")
+            open_alerts = int(cur.fetchone()['c'])
+        alert_conn.close()
+    except Exception:
+        pass
 
     pipeline_ok = bool(
         db.get("connected")
@@ -379,5 +395,8 @@ def collect_dashboard():
             "archive_human": human_bytes(
                 archive_bytes
             ),
+            "archive_path": str(archive_path),
+            "archive_disk_percent": round(archive_disk.used / archive_disk.total * 100, 1) if archive_disk and archive_disk.total else None,
+            "open_alerts": open_alerts,
         },
     }
