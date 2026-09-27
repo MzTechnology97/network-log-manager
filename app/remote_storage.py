@@ -79,3 +79,40 @@ def integrity_test(cfg, secret, folder=""):
     got=hashlib.sha256(read).hexdigest()
     if got!=digest: raise RuntimeError("Storage integrity verification failed")
     return {"ok":True,"sha256":digest,"bytes":len(payload)}
+
+
+def upload_file(cfg, secret, local_path, relative_path):
+    src=Path(local_path); rel=_safe_folder(relative_path)
+    if not src.is_file(): raise FileNotFoundError(str(src))
+    kind=cfg["type"].upper()
+    if kind=="LOCAL":
+        root=Path(cfg["path"]).resolve(); dst=(root/rel).resolve()
+        if src.resolve()!=dst:
+            dst.parent.mkdir(parents=True,exist_ok=True)
+            import shutil; shutil.copy2(src,dst)
+        return
+    if kind=="SMB":
+        parent=posixpath.dirname(posixpath.join(_safe_folder(cfg.get("folder","")),rel))
+        current=""
+        for part in [p for p in parent.split("/") if p]:
+            current=posixpath.join(current,part); 
+            try: _smb_cmd(cfg,secret,f'mkdir "{current}"')
+            except RuntimeError: pass
+        remote=posixpath.join(_safe_folder(cfg.get("folder","")),rel)
+        _smb_cmd(cfg,secret,f'put "{src}" "{remote}"')
+        return
+    if kind=="SFTP":
+        t=paramiko.Transport((cfg["host"],int(cfg.get("port") or 22)))
+        try:
+            t.connect(username=secret["username"],password=secret["password"]); s=paramiko.SFTPClient.from_transport(t)
+            remote=posixpath.join(cfg.get("path") or "/",_safe_folder(cfg.get("folder","")),rel)
+            parent=posixpath.dirname(remote); current=""
+            for part in parent.split("/"):
+                if not part: continue
+                current+="/"+part
+                try: s.mkdir(current)
+                except OSError: pass
+            s.put(str(src),remote)
+        finally: t.close()
+        return
+    raise ValueError("Unsupported remote storage type")
