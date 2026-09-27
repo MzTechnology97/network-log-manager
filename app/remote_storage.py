@@ -22,12 +22,12 @@ def _safe_folder(folder):
     return folder.strip("/")
 
 def _smb_cmd(cfg, secret, command):
-    host=cfg["host"].strip(); share=cfg["share"].strip().strip("/\\")
+    host=cfg["host"].strip(); share=cfg["share"].strip().strip("/\\\\")
     user=secret.get("username",""); password=secret.get("password","")
     domain=cfg.get("domain","").strip()
     with tempfile.NamedTemporaryFile("w",delete=False) as auth:
-        auth.write("username = "+user+"\\npassword = "+password+"\\n")
-        if domain: auth.write("domain = "+domain+"\\n")
+        auth.write("username = "+user+chr(10)+"password = "+password+chr(10))
+        if domain: auth.write("domain = "+domain+chr(10))
         auth_path=auth.name
     os.chmod(auth_path,0o600)
     try:
