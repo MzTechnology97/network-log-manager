@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS storage_targets (
   domain_name VARCHAR(255) NULL,
   secret_encrypted LONGTEXT NULL,
   health_status ENUM('UNKNOWN','HEALTHY','DEGRADED','OFFLINE') NOT NULL DEFAULT 'UNKNOWN',
+  health_failures INT UNSIGNED NOT NULL DEFAULT 0,
   last_health_at DATETIME(3) NULL,
   last_success_at DATETIME(3) NULL,
   last_error TEXT NULL,
