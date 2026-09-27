@@ -3,6 +3,15 @@ set -Eeuo pipefail
 LAUNCH_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$LAUNCH_ROOT/scripts/lib/common.sh"
 require_root
+
+# Docker Compose gives exported shell variables precedence over --env-file.
+# Remove credential/configuration names from the inherited environment so the
+# installation-owned env file remains the single source of truth.
+sanitize_compose_environment() {
+  unset DB_ROOT_PASSWORD NETLOG_APP_PASSWORD NETLOG_READER_PASSWORD
+  unset NETLOG_INGEST_PASSWORD NETLOG_MAINT_PASSWORD SECRET_KEY
+  unset SYSLOG_PORT ARCHIVE_ROOT TZ HOSTNAME_FQDN TLS_DIR
+}
 load_install_state
 if [[ "${AUTO_UPDATE:-0}" != "1" && "${1:-}" == "--automatic" ]]; then
   log "Automatic updates are disabled."
@@ -26,6 +35,7 @@ target_commit="$(git rev-parse "$target^{commit}")"
 [[ "$target_commit" != "$old" ]] || { log "Already up to date."; exit 0; }
 
 if [[ "$MODE" == docker ]]; then
+  sanitize_compose_environment
   backup_path="$("$REPO/scripts/backup-docker.sh" | tail -n1)"
 else
   backup_path="$("$REPO/scripts/backup.sh" | tail -n1)"
@@ -36,6 +46,7 @@ rollback(){
   log "Rolling application code back to $old. Database migrations remain forward-only."
   git checkout --detach "$old"
   if [[ "$MODE" == docker ]]; then
+    sanitize_compose_environment
     source "$CONFIG_DIR/install.env"
     cd "$REPO"
     if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi
@@ -51,7 +62,9 @@ trap 'rc=$?; if (( rc != 0 )); then rollback || true; fi; exit $rc' EXIT
 git checkout --detach "$target_commit"
 
 if [[ "$MODE" == docker ]]; then
+  sanitize_compose_environment
   "$REPO/scripts/migrate-docker.sh"
+  sanitize_compose_environment
   source "$CONFIG_DIR/install.env"
   if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi
   "${C[@]}" --env-file "$STATE_DIR/docker/.env" build --pull
