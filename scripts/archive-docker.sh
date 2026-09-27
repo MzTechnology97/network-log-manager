@@ -6,6 +6,7 @@ require_root
 load_install_state
 source "$CONFIG_DIR/install.env"
 source "$CONFIG_DIR/secrets.env"
+export TZ="${TZ:-Europe/Rome}"
 [[ "${MODE:-}" == "docker" ]] || die "Docker archive job requires MODE=docker."
 cd "$REPO_ROOT"
 if docker compose version >/dev/null 2>&1; then COMPOSE=(docker compose); else COMPOSE=(docker-compose); fi
