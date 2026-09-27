@@ -503,12 +503,18 @@ async function refresh() {
                 "pipeline-status"
             );
 
-        if (d.pipeline.ok) {
+        if (d.pipeline.state === "operational") {
             dot.className = "dot ok";
             pipeline.textContent = "Operational";
+        } else if (d.pipeline.state === "waiting") {
+            dot.className = "dot warning";
+            pipeline.textContent = "Waiting for first logs";
+        } else if (d.pipeline.state === "stale") {
+            dot.className = "dot warning";
+            pipeline.textContent = "Ingestion stale";
         } else {
             dot.className = "dot bad";
-            pipeline.textContent = "Attention";
+            pipeline.textContent = "Service unavailable";
         }
 
         service(
@@ -532,14 +538,14 @@ async function refresh() {
             "last-age"
         ).textContent =
             age === null
-                ? "Unknown"
+                ? (d.pipeline.has_received_logs ? "Unknown" : "No logs received yet")
                 : age.toFixed(1) + " sec ago";
 
         document.getElementById(
             "rate"
         ).textContent =
             d.ingestion.logs_per_second === null
-                ? "calibrating…"
+                ? (d.pipeline.has_received_logs ? "calibrating…" : "0.0")
                 : d.ingestion.logs_per_second.toFixed(1);
 
         document.getElementById(
