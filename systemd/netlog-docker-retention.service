@@ -1,0 +1,8 @@
+[Unit]
+Description=Network Log Manager archive retention cleanup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/netlog-manager/scripts/retention-docker.sh
