@@ -24,7 +24,7 @@ else
 fi
 
 install -d -o root -g root -m 0750 "$STATE_DIR/docker"
-# The application and monitor containers run as UID/GID 10001 and perform\n# storage integrity probes (write/read/hash/delete) on the local archive.\ninstall -d -o 10001 -g 10001 -m 0750 "$ARCHIVE_ROOT"
+# The application and monitor containers run as UID/GID 10001 and perform\n# storage integrity probes (write/read/hash/delete) on the local archive.\ninstall -d -o 10001 -g 999 -m 0750 "$ARCHIVE_ROOT"
 install -d -o root -g root -m 0750 "$STATE_DIR/docker/config" "$STATE_DIR/docker/tls"
 
 cat >"$STATE_DIR/docker/.env" <<EOF
