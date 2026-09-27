@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Network Log Manager</title>
+
+<style>
+:root {
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #080d18;
+    color: #e5e7eb;
+    font-family:
+        Inter, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+header {
+    min-height: 68px;
+    padding: 0 28px;
+    background: #0f172a;
+    border-bottom: 1px solid #253047;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.user {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: #94a3b8;
+}
+
+.logout {
+    border: 1px solid #334155;
+    background: transparent;
+    color: #cbd5e1;
+    padding: 7px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+main {
+    max-width: 1500px;
+    margin: auto;
+    padding: 28px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.card {
+    background: #0f172a;
+    border: 1px solid #243044;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.span2 {
+    grid-column: span 2;
+}
+
+.span4 {
+    grid-column: span 4;
+}
+
+.label {
+    color: #94a3b8;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 10px;
+}
+
+.value {
+    font-size: 28px;
+    font-weight: 700;
+}
+
+.sub {
+    color: #94a3b8;
+    margin-top: 7px;
+    font-size: 13px;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #64748b;
+}
+
+.ok {
+    background: #22c55e;
+    box-shadow: 0 0 9px #22c55e70;
+}
+
+.bad {
+    background: #ef4444;
+}
+
+.warning {
+    background: #f59e0b;
+}
+
+.service-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.service {
+    padding: 13px;
+    border: 1px solid #253047;
+    border-radius: 8px;
+}
+
+.progress {
+    height: 8px;
+    background: #1e293b;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 12px;
+}
+
+.progress > div {
+    height: 100%;
+    background: #3b82f6;
+    width: 0;
+}
+
+.event {
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo,
+        Monaco, Consolas, monospace;
+    font-size: 14px;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+}
+
+.good-text {
+    color: #4ade80;
+}
+
+.bad-text {
+    color: #f87171;
+}
+
+.muted {
+    color: #94a3b8;
+}
+
+footer {
+    margin-top: 20px;
+    color: #64748b;
+    font-size: 12px;
+    text-align: right;
+}
+
+@media (max-width: 1000px) {
+    .grid {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+    .span4 {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 650px) {
+    header {
+        padding: 0 16px;
+    }
+
+    main {
+        padding: 16px;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+    }
+
+    .span2,
+    .span4 {
+        grid-column: span 1;
+    }
+
+    .service-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+    <link rel="stylesheet" href="/static/css/navbar.css">
+</head>
+
+<body>
+
+{% set active_page = "dashboard" %}
+{% include "partials/navbar.html" %}
+
+<main>
+
+<div class="grid">
+
+    <section class="card span2">
+        <div class="label">Pipeline Health</div>
+
+        <div class="status">
+            <span id="pipeline-dot"
+                  class="dot"></span>
+
+            <span id="pipeline-status"
+                  class="value">
+                Loading…
+            </span>
+        </div>
+
+        <div class="service-grid">
+
+            <div class="service">
+                <div class="label">MariaDB</div>
+                <div id="mariadb">
+                    Checking…
+                </div>
+            </div>
+
+            <div class="service">
+                <div class="label">
+                    Syslog Listener
+                </div>
+                <div id="syslog">
+                    Checking…
+                </div>
+            </div>
+
+            <div class="service">
+                <div class="label">
+                    Current Table
+                </div>
+                <div id="table">
+                    —
+                </div>
+            </div>
+
+            <div class="service">
+                <div class="label">
+                    Last Log
+                </div>
+                <div id="last-age">
+                    —
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+
+    <section class="card">
+        <div class="label">Ingestion</div>
+
+        <div id="rate" class="value">
+            —
+        </div>
+
+        <div class="sub">
+            log / second
+        </div>
+    </section>
+
+
+    <section class="card">
+        <div class="label">Today</div>
+
+        <div id="today" class="value">
+            —
+        </div>
+
+        <div class="sub">
+            estimated records
+        </div>
+    </section>
+
+
+    <section class="card">
+        <div class="label">CPU</div>
+
+        <div id="cpu" class="value">
+            —
+        </div>
+
+        <div class="progress">
+            <div id="cpu-bar"></div>
+        </div>
+
+        <div id="load" class="sub">
+            —
+        </div>
+    </section>
+
+
+    <section class="card">
+        <div class="label">Memory</div>
+
+        <div id="ram" class="value">
+            —
+        </div>
+
+        <div class="progress">
+            <div id="ram-bar"></div>
+        </div>
+
+        <div id="ram-detail" class="sub">
+            —
+        </div>
+    </section>
+
+
+    <section class="card">
+        <div class="label">Database</div>
+
+        <div id="database-size" class="value">
+            —
+        </div>
+
+        <div id="database-detail" class="sub">
+            —
+        </div>
+    </section>
+
+
+    <section class="card">
+        <div class="label">Archive</div>
+
+        <div id="archive-size" class="value">
+            —
+        </div>
+
+        <div class="sub">
+            compressed historical logs
+        </div>
+    </section>
+
+
+    <section class="card span2">
+        <div class="label">Storage</div>
+
+        <div id="disk" class="value">
+            —
+        </div>
+
+        <div class="progress">
+            <div id="disk-bar"></div>
+        </div>
+
+        <div id="disk-detail" class="sub">
+            —
+        </div>
+    </section>
+
+
+    <section class="card span2">
+        <div class="label">System</div>
+
+        <div id="uptime" class="value">
+            —
+        </div>
+
+        <div class="sub">
+            uptime
+        </div>
+    </section>
+
+
+    <section class="card span4">
+        <div class="label">Latest Event</div>
+
+        <div id="event" class="event">
+            Waiting for data…
+        </div>
+    </section>
+
+
+    <section class="card span4">
+        <div class="label">Live Parser Output</div>
+
+        <div id="live-log" class="event muted">
+            Waiting for data…
+        </div>
+    </section>
+
+</div>
+
+<footer>
+    Last dashboard update:
+    <span id="updated">—</span>
+</footer>
+
+</main>
+
+<script>
+function num(value) {
+    if (value === null || value === undefined) {
+        return "—";
+    }
+
+    return new Intl.NumberFormat("it-IT").format(value);
+}
+
+function bytes(value) {
+    if (value === null || value === undefined) {
+        return "—";
+    }
+
+    const units = ["B", "KB", "MB", "GB", "TB"];
+
+    let n = Number(value);
+    let i = 0;
+
+    while (n >= 1024 && i < units.length - 1) {
+        n /= 1024;
+        i++;
+    }
+
+    return n.toFixed(1) + " " + units[i];
+}
+
+function uptime(seconds) {
+    if (seconds === null || seconds === undefined) {
+        return "—";
+    }
+
+    let days = Math.floor(seconds / 86400);
+    let hours = Math.floor(
+        (seconds % 86400) / 3600
+    );
+
+    return days + "d " + hours + "h";
+}
+
+function service(element, ok) {
+    element.textContent =
+        ok ? "● Running" : "● Unavailable";
+
+    element.className =
+        ok ? "good-text" : "bad-text";
+}
+
+async function refresh() {
+    try {
+        const response = await fetch(
+            "/api/dashboard",
+            {
+                cache: "no-store",
+                credentials: "same-origin"
+            }
+        );
+
+        if (response.status === 401) {
+            window.location = "/login";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                "HTTP " + response.status
+            );
+        }
+
+        const d = await response.json();
+
+        const dot =
+            document.getElementById("pipeline-dot");
+
+        const pipeline =
+            document.getElementById(
+                "pipeline-status"
+            );
+
+        if (d.pipeline.ok) {
+            dot.className = "dot ok";
+            pipeline.textContent = "Operational";
+        } else {
+            dot.className = "dot bad";
+            pipeline.textContent = "Attention";
+        }
+
+        service(
+            document.getElementById("mariadb"),
+            d.services.mariadb
+        );
+
+        service(
+            document.getElementById("syslog"),
+            d.services.syslog_listener
+        );
+
+        document.getElementById("table").textContent =
+            d.database.table_exists
+                ? d.database.table
+                : "Missing";
+
+        let age = d.pipeline.log_age_seconds;
+
+        document.getElementById(
+            "last-age"
+        ).textContent =
+            age === null
+                ? "Unknown"
+                : age.toFixed(1) + " sec ago";
+
+        document.getElementById(
+            "rate"
+        ).textContent =
+            d.ingestion.logs_per_second === null
+                ? "calibrating…"
+                : d.ingestion.logs_per_second.toFixed(1);
+
+        document.getElementById(
+            "today"
+        ).textContent =
+            num(d.ingestion.estimated_today);
+
+        document.getElementById(
+            "cpu"
+        ).textContent =
+            d.system.cpu_percent.toFixed(1) + "%";
+
+        document.getElementById(
+            "cpu-bar"
+        ).style.width =
+            Math.min(
+                d.system.cpu_percent,
+                100
+            ) + "%";
+
+        document.getElementById(
+            "load"
+        ).textContent =
+            "Load " +
+            d.system.load1 + " / " +
+            d.system.load5 + " / " +
+            d.system.load15;
+
+        document.getElementById(
+            "ram"
+        ).textContent =
+            d.system.memory_percent.toFixed(1) + "%";
+
+        document.getElementById(
+            "ram-bar"
+        ).style.width =
+            Math.min(
+                d.system.memory_percent,
+                100
+            ) + "%";
+
+        document.getElementById(
+            "ram-detail"
+        ).textContent =
+            bytes(d.system.memory_used) +
+            " / " +
+            bytes(d.system.memory_total);
+
+        document.getElementById(
+            "database-size"
+        ).textContent =
+            d.database.human_size || "—";
+
+        document.getElementById(
+            "database-detail"
+        ).textContent =
+            num(d.database.tables_count) +
+            " tables · NAT index " +
+            (d.database.index_ok ? "OK" : "missing");
+
+        document.getElementById(
+            "archive-size"
+        ).textContent =
+            d.storage.archive_human || "—";
+
+        document.getElementById(
+            "disk"
+        ).textContent =
+            d.storage.disk_percent.toFixed(1) + "%";
+
+        document.getElementById(
+            "disk-bar"
+        ).style.width =
+            d.storage.disk_percent + "%";
+
+        document.getElementById(
+            "disk-detail"
+        ).textContent =
+            bytes(d.storage.disk_free) +
+            " free / " +
+            bytes(d.storage.disk_total);
+
+        document.getElementById(
+            "uptime"
+        ).textContent =
+            uptime(d.system.uptime_seconds);
+
+        const row = d.database.last_row;
+
+        if (row) {
+            document.getElementById(
+                "event"
+            ).textContent =
+                row.timestamp +
+                "  " +
+                row.protocol +
+                "  " +
+                row.source_ip + ":" +
+                row.source_port +
+                "  →  " +
+                row.dest_ip + ":" +
+                row.dest_port +
+                "  | NAT " +
+                (row.nat_source_ip || "—") +
+                ":" +
+                (row.nat_source_port || "—");
+        }
+
+        document.getElementById(
+            "live-log"
+        ).textContent =
+            d.ingestion.last_log || "—";
+
+        document.getElementById(
+            "updated"
+        ).textContent =
+            new Date().toLocaleTimeString(
+                "it-IT"
+            );
+
+    } catch (error) {
+        const dot =
+            document.getElementById("pipeline-dot");
+
+        dot.className = "dot bad";
+
+        document.getElementById(
+            "pipeline-status"
+        ).textContent =
+            "Dashboard unavailable";
+
+        console.error(error);
+    }
+}
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+
+</body>
+</html>

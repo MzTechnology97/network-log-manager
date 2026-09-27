@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Sicurezza - Network Log Manager</title>
+
+<link rel="stylesheet" href="/static/css/navbar.css">
+
+<style>
+body {
+    margin: 0;
+    background: #080f1c;
+    color: #e5e7eb;
+    font-family: Arial, sans-serif;
+}
+.container {
+    max-width: 820px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+.card {
+    background: #111b2e;
+    border: 1px solid #263449;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 22px;
+}
+.subtitle, .info {
+    color: #94a3b8;
+    line-height: 1.55;
+}
+.badge {
+    display: inline-block;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: bold;
+}
+.enabled {
+    background: #14532d;
+    color: #bbf7d0;
+}
+.disabled {
+    background: #7f1d1d;
+    color: #fecaca;
+}
+label {
+    display: block;
+    color: #cbd5e1;
+    margin: 17px 0 6px;
+    font-size: 14px;
+}
+input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px;
+    border-radius: 7px;
+    border: 1px solid #374151;
+    background: #0b1424;
+    color: white;
+}
+button {
+    margin-top: 20px;
+    border: 0;
+    border-radius: 7px;
+    padding: 10px 15px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}
+.danger {
+    background: #991b1b;
+}
+.error {
+    padding: 12px;
+    background: #450a0a;
+    color: #fecaca;
+    border-radius: 7px;
+    margin-bottom: 18px;
+}
+.message {
+    padding: 12px;
+    background: #14532d;
+    color: #bbf7d0;
+    border-radius: 7px;
+    margin-bottom: 18px;
+}
+.qr {
+    margin: 20px 0;
+    padding: 15px;
+    display: inline-block;
+    background: white;
+    border-radius: 10px;
+}
+.qr img {
+    width: 240px;
+    height: 240px;
+    display: block;
+}
+.secret {
+    padding: 12px;
+    background: #0b1424;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    font-family: monospace;
+    overflow-wrap: anywhere;
+    letter-spacing: 1px;
+}
+.warning {
+    color: #fbbf24;
+}
+</style>
+</head>
+
+<body>
+
+{% set active_page = "" %}
+{% include "partials/navbar.html" %}
+
+<div class="container">
+
+<h1>Sicurezza</h1>
+
+<div class="subtitle">
+    Configurazione delle opzioni di autenticazione.
+</div>
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+{% if message %}
+<div class="message">{{ message }}</div>
+{% endif %}
+
+
+{% if mfa_enabled %}
+
+<div class="card">
+
+<h2>Autenticazione a due fattori (2FA)</h2>
+
+<p>
+Stato:
+<span class="badge enabled">Attiva</span>
+</p>
+
+<p class="info">
+L'accesso è protetto tramite codice TOTP generato
+dall'applicazione Authenticator configurata sul tuo dispositivo.
+</p>
+
+<h3>Disattiva 2FA</h3>
+
+<p class="warning">
+La disattivazione riduce la protezione dell'account.
+</p>
+
+<form method="post"
+      action="/account/security/disable">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<label>Password attuale</label>
+<input type="password"
+       name="password"
+       autocomplete="current-password"
+       required>
+
+<label>Codice 2FA</label>
+<input type="text"
+       name="code"
+       inputmode="numeric"
+       autocomplete="one-time-code"
+       pattern="[0-9]{6}"
+       maxlength="6"
+       required>
+
+<button type="submit"
+        class="danger">
+    Disattiva 2FA
+</button>
+
+</form>
+
+</div>
+
+
+{% elif setup_active %}
+
+<div class="card">
+
+<h2>Configura autenticazione a due fattori</h2>
+
+<p class="info">
+Scansiona il QR code con Google Authenticator,
+Microsoft Authenticator, Authy o un'altra applicazione
+compatibile con TOTP.
+</p>
+
+<div class="qr">
+<img
+    src="data:image/png;base64,{{ qr_base64 }}"
+    alt="QR code configurazione TOTP">
+</div>
+
+<p class="info">
+Se non puoi utilizzare il QR code, inserisci manualmente
+questa chiave nell'app Authenticator:
+</p>
+
+<div class="secret">
+{{ manual_secret }}
+</div>
+
+<p class="warning">
+Non condividere questa chiave. Il 2FA non verrà attivato
+finché non confermerai un codice valido.
+</p>
+
+<form method="post"
+      action="/account/security/enable">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<label>Codice generato dall'app</label>
+<input type="text"
+       name="code"
+       inputmode="numeric"
+       autocomplete="one-time-code"
+       pattern="[0-9]{6}"
+       maxlength="6"
+       autofocus
+       required>
+
+<button type="submit">
+    Verifica e attiva 2FA
+</button>
+
+</form>
+
+</div>
+
+
+{% else %}
+
+<div class="card">
+
+<h2>Autenticazione a due fattori (2FA)</h2>
+
+<p>
+Stato:
+<span class="badge disabled">Non attiva</span>
+</p>
+
+<p class="info">
+Puoi proteggere ulteriormente l'account richiedendo
+un codice temporaneo TOTP oltre alla password.
+</p>
+
+<h3>Avvia configurazione</h3>
+
+<p class="info">
+Per motivi di sicurezza conferma prima la password
+del tuo account.
+</p>
+
+<form method="post"
+      action="/account/security/setup">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<label>Password attuale</label>
+<input type="password"
+       name="password"
+       autocomplete="current-password"
+       required>
+
+<button type="submit">
+    Configura 2FA
+</button>
+
+</form>
+
+</div>
+
+{% endif %}
+
+</div>
+</body>
+</html>

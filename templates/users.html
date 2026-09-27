@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Utenti - Network Log Manager</title>
+
+<style>
+body {
+    margin: 0;
+    background: #080f1c;
+    color: #e5e7eb;
+    font-family: Arial, sans-serif;
+}
+nav {
+    background: #0f1a2d;
+    border-bottom: 1px solid #263449;
+    padding: 0 18px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+}
+.brand {
+    font-weight: bold;
+    margin-right: auto;
+}
+nav a {
+    color: #b8c7dd;
+    text-decoration: none;
+    margin-left: 26px;
+}
+nav a.active {
+    color: white;
+    font-weight: bold;
+}
+.container {
+    max-width: 1300px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+h1 {
+    margin-bottom: 5px;
+}
+.subtitle {
+    color: #9ca3af;
+    margin-bottom: 25px;
+}
+.card {
+    background: #111b2e;
+    border: 1px solid #263449;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 25px;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 16px;
+}
+label {
+    display: block;
+    color: #9ca3af;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+input, select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border-radius: 7px;
+    border: 1px solid #374151;
+    background: #0b1424;
+    color: white;
+}
+.actions {
+    margin-top: 18px;
+}
+button, .button {
+    border: 0;
+    border-radius: 7px;
+    padding: 9px 14px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+.button-secondary {
+    background: #334155;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    text-align: left;
+    padding: 13px 10px;
+    border-bottom: 1px solid #263449;
+    vertical-align: middle;
+}
+th {
+    color: #93a4bd;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+.badge {
+    display: inline-block;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: bold;
+}
+.enabled {
+    background: #14532d;
+    color: #bbf7d0;
+}
+.disabled {
+    background: #7f1d1d;
+    color: #fecaca;
+}
+.mfa {
+    background: #1e3a8a;
+    color: #bfdbfe;
+}
+.notice {
+    padding: 12px;
+    border-radius: 7px;
+    margin-bottom: 18px;
+    background: #172554;
+}
+.error {
+    padding: 12px;
+    border-radius: 7px;
+    margin-bottom: 18px;
+    background: #450a0a;
+    color: #fecaca;
+}
+.small {
+    color: #94a3b8;
+    font-size: 12px;
+}
+.logout {
+    margin-left: 25px;
+}
+.logout button {
+    background: transparent;
+    border: 1px solid #475569;
+    padding: 6px 10px;
+}
+@media (max-width: 800px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+    table {
+        font-size: 12px;
+    }
+}
+</style>
+    <link rel="stylesheet" href="/static/css/navbar.css">
+</head>
+
+<body>
+
+{% set active_page = "" %}
+{% include "partials/navbar.html" %}
+
+<div class="container">
+
+<h1>Gestione utenti</h1>
+
+<div class="subtitle">
+    Account, ruoli, accesso e autenticazione.
+</div>
+
+{% if message %}
+<div class="notice">{{ message }}</div>
+{% endif %}
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<div class="card">
+
+<h2>Crea nuovo utente</h2>
+
+<form method="post" action="/admin/users/create">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<div class="grid">
+
+<div>
+<label>Username</label>
+<input type="text"
+       name="username"
+       maxlength="64"
+       required
+       autocomplete="off">
+</div>
+
+<div>
+<label>Nome visualizzato</label>
+<input type="text"
+       name="display_name"
+       maxlength="128">
+</div>
+
+<div>
+<label>E-mail (opzionale)</label>
+<input type="email"
+       name="email"
+       maxlength="254">
+</div>
+
+<div>
+<label>Ruolo</label>
+<select name="role" required>
+{% for role in roles %}
+<option value="{{ role.name }}">
+    {{ role.name }}
+</option>
+{% endfor %}
+</select>
+</div>
+
+<div>
+<label>Password iniziale</label>
+<input type="password"
+       name="password"
+       minlength="12"
+       required
+       autocomplete="new-password">
+</div>
+
+<div>
+<label>Conferma password</label>
+<input type="password"
+       name="password_confirm"
+       minlength="12"
+       required
+       autocomplete="new-password">
+</div>
+
+</div>
+
+<div class="actions">
+<button type="submit">
+    Crea utente
+</button>
+</div>
+
+</form>
+</div>
+
+
+<div class="card">
+
+<h2>Utenti</h2>
+
+<table>
+
+<thead>
+<tr>
+<th>Username</th>
+<th>Nome</th>
+<th>Ruolo</th>
+<th>Stato</th>
+<th>2FA</th>
+<th>Ultimo accesso</th>
+<th>Blocco</th>
+<th>Azioni</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for user in users %}
+
+<tr>
+
+<td>
+<strong>{{ user.username }}</strong>
+{% if user.id == session.user_id %}
+<div class="small">Account corrente</div>
+{% endif %}
+</td>
+
+<td>{{ user.display_name or "-" }}</td>
+
+<td>{{ user.roles or "-" }}</td>
+
+<td>
+{% if user.enabled %}
+<span class="badge enabled">Attivo</span>
+{% else %}
+<span class="badge disabled">Disabilitato</span>
+{% endif %}
+</td>
+
+<td>
+{% if user.mfa_enabled %}
+<span class="badge mfa">Attivo</span>
+{% else %}
+<span class="small">Non attivo</span>
+{% endif %}
+</td>
+
+<td>
+{% if user.last_login_at %}
+{{ user.last_login_at.strftime('%d/%m/%Y %H:%M:%S') }}
+{% else %}
+-
+{% endif %}
+</td>
+
+<td>
+{% if user.locked_until %}
+{{ user.locked_until.strftime('%d/%m/%Y %H:%M:%S') }}
+{% else %}
+-
+{% endif %}
+</td>
+
+<td>
+<a class="button button-secondary"
+   href="/admin/users/{{ user.id }}">
+    Gestisci
+</a>
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+</table>
+
+</div>
+
+</div>
+</body>
+</html>

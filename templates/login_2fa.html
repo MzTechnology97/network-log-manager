@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1">
+
+<title>Verifica 2FA - Network Log Manager</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0b1220;
+    color: #e5e7eb;
+    font-family: system-ui, sans-serif;
+}
+
+.card {
+    width: 390px;
+    max-width: calc(100% - 32px);
+    padding: 36px;
+    background: #111827;
+    border: 1px solid #253047;
+    border-radius: 14px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.35);
+}
+
+h1 {
+    margin: 0 0 6px;
+    font-size: 25px;
+}
+
+.subtitle {
+    color: #94a3b8;
+    margin-bottom: 28px;
+    line-height: 1.5;
+}
+
+label {
+    display: block;
+    margin: 16px 0 7px;
+    font-size: 14px;
+    color: #cbd5e1;
+}
+
+input {
+    width: 100%;
+    padding: 13px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: #0f172a;
+    color: white;
+    outline: none;
+    text-align: center;
+    font-size: 22px;
+    letter-spacing: 7px;
+}
+
+input:focus {
+    border-color: #60a5fa;
+}
+
+button {
+    width: 100%;
+    margin-top: 24px;
+    padding: 12px;
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    background: #2563eb;
+    color: white;
+}
+
+.error {
+    padding: 10px 12px;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    background: #451a1a;
+    color: #fecaca;
+    font-size: 14px;
+}
+
+.back {
+    display: block;
+    margin-top: 18px;
+    text-align: center;
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+.footer {
+    margin-top: 24px;
+    text-align: center;
+    color: #64748b;
+    font-size: 12px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+
+<h1>Verifica 2FA</h1>
+
+<div class="subtitle">
+    Inserisci il codice a 6 cifre generato
+    dalla tua applicazione Authenticator.
+</div>
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+<form method="post"
+      action="/login/2fa">
+
+<label>Codice di autenticazione</label>
+
+<input
+    name="code"
+    type="text"
+    inputmode="numeric"
+    autocomplete="one-time-code"
+    pattern="[0-9]{6}"
+    maxlength="6"
+    required
+    autofocus
+>
+
+<button type="submit">
+    Verifica e accedi
+</button>
+
+</form>
+
+<a class="back" href="/login">
+    Annulla e torna al login
+</a>
+
+<div class="footer">
+    Secure Log Management
+</div>
+
+</div>
+
+</body>
+</html>

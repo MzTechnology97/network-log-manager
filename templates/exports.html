@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1">
+
+<title>Export - Network Log Manager</title>
+
+{% if active_jobs %}
+<meta http-equiv="refresh" content="3">
+{% endif %}
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #080d18;
+    color: #e5e7eb;
+    font-family:
+        Inter, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+header {
+    min-height: 68px;
+    padding: 0 28px;
+    background: #0f172a;
+    border-bottom: 1px solid #253047;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.user {
+    color: #94a3b8;
+}
+
+nav {
+    display: flex;
+    gap: 8px;
+}
+
+nav a {
+    color: #94a3b8;
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 7px;
+}
+
+nav a:hover,
+nav a.active {
+    color: #fff;
+    background: #1e293b;
+}
+
+.logout {
+    border: 1px solid #334155;
+    background: transparent;
+    color: #cbd5e1;
+    padding: 7px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+main {
+    max-width: 1500px;
+    margin: auto;
+    padding: 28px;
+}
+
+h1 {
+    margin: 0 0 6px;
+    font-size: 24px;
+}
+
+.description {
+    color: #94a3b8;
+    margin: 0 0 24px;
+}
+
+.card {
+    background: #0f172a;
+    border: 1px solid #243044;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 13px 15px;
+    text-align: left;
+    border-bottom: 1px solid #1e293b;
+    white-space: nowrap;
+}
+
+th {
+    color: #94a3b8;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    background: #0b1220;
+}
+
+td {
+    font-size: 14px;
+}
+
+tr:last-child td {
+    border-bottom: 0;
+}
+
+tr:hover td {
+    background: #111b2d;
+}
+
+.status {
+    display: inline-block;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.pending {
+    background: #78350f;
+    color: #fde68a;
+}
+
+.running {
+    background: #1e3a8a;
+    color: #bfdbfe;
+}
+
+.completed {
+    background: #14532d;
+    color: #bbf7d0;
+}
+
+.failed {
+    background: #7f1d1d;
+    color: #fecaca;
+}
+
+.cancelled {
+    background: #374151;
+    color: #d1d5db;
+}
+
+.button {
+    display: inline-block;
+    padding: 7px 11px;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #e5e7eb;
+    background: #1e293b;
+    border: 1px solid #334155;
+}
+
+.button:hover {
+    background: #334155;
+}
+
+.download {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #fff;
+}
+
+.expired {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.empty {
+    padding: 40px;
+    text-align: center;
+    color: #94a3b8;
+}
+
+.filters {
+    color: #94a3b8;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.progress-text {
+    color: #93c5fd;
+    font-size: 12px;
+}
+
+@media (max-width: 700px) {
+    header {
+        padding: 12px 16px;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .header-right {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    main {
+        padding: 16px;
+    }
+}
+</style>
+    <link rel="stylesheet" href="/static/css/navbar.css">
+</head>
+
+<body>
+
+{% set active_page = "exports" %}
+{% include "partials/navbar.html" %}
+
+<main>
+
+<h1>
+{% if is_admin %}
+Export
+{% else %}
+I miei export
+{% endif %}
+</h1>
+
+<p class="description">
+    {% if is_admin %}
+    Gestione degli export CSV richiesti dagli utenti.
+    {% else %}
+    Export CSV richiesti dal tuo account.
+    {% endif %}
+    I file generati sono temporanei e vengono
+    rimossi automaticamente dopo il periodo
+    di conservazione previsto.
+</p>
+
+<div class="card">
+
+{% if jobs %}
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+<tr>
+    <th>ID</th>
+    {% if is_admin %}
+    <th>Utente</th>
+    {% endif %}
+    <th>Richiesto</th>
+    <th>Periodo</th>
+    <th>Filtri</th>
+    <th>Stato</th>
+    <th>Righe</th>
+    <th>Dimensione</th>
+    <th>Azioni</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for job in jobs %}
+
+<tr>
+
+<td>
+    #{{ job.id }}
+</td>
+
+{% if is_admin %}
+<td>
+    {{ job.username }}
+</td>
+{% endif %}
+
+<td>
+    {{ job.requested_at.strftime('%d/%m/%Y %H:%M:%S') }}
+</td>
+
+<td>
+    {{ job.start_time.strftime('%d/%m/%Y %H:%M:%S') }}
+    <br>
+    <span class="filters">
+        →
+        {{ job.end_time.strftime('%d/%m/%Y %H:%M:%S') }}
+    </span>
+</td>
+
+<td class="filters">
+
+    {% if job.source_ip %}
+        IP cliente:
+        {{ job.source_ip }}<br>
+    {% endif %}
+
+    {% if job.source_port %}
+        Porta cliente:
+        {{ job.source_port }}<br>
+    {% endif %}
+
+    {% if job.nat_source_ip %}
+        IP NAT:
+        {{ job.nat_source_ip }}<br>
+    {% endif %}
+
+    {% if job.nat_source_port %}
+        Porta NAT:
+        {{ job.nat_source_port }}<br>
+    {% endif %}
+
+    {% if job.dest_ip %}
+        Destinazione:
+        {{ job.dest_ip }}<br>
+    {% endif %}
+
+    {% if job.dest_port %}
+        Porta destinazione:
+        {{ job.dest_port }}<br>
+    {% endif %}
+
+    {% if job.protocol %}
+        Protocollo:
+        {{ job.protocol }}
+    {% endif %}
+
+</td>
+
+<td>
+
+{% if job.status == "PENDING" %}
+
+<span class="status pending">
+    In coda
+</span>
+
+{% elif job.status == "RUNNING" %}
+
+<span class="status running">
+    In elaborazione
+</span>
+
+<br>
+
+<span class="progress-text">
+    {{ "{:,}".format(
+        job.progress_rows or 0
+    ) }}
+    righe
+</span>
+
+{% elif job.status == "COMPLETED" %}
+
+<span class="status completed">
+    Completato
+</span>
+
+{% elif job.status == "FAILED" %}
+
+<span class="status failed">
+    Fallito
+</span>
+
+{% else %}
+
+<span class="status cancelled">
+    {{ job.status }}
+</span>
+
+{% endif %}
+
+</td>
+
+<td>
+    {% if job.result_rows is not none %}
+        {{ "{:,}".format(
+            job.result_rows
+        ) }}
+    {% elif job.progress_rows %}
+        {{ "{:,}".format(
+            job.progress_rows
+        ) }}
+    {% else %}
+        -
+    {% endif %}
+</td>
+
+<td>
+    {% if job.file_size %}
+        {{ "%.1f"|format(
+            job.file_size / 1024
+        ) }} KB
+    {% else %}
+        -
+    {% endif %}
+</td>
+
+<td>
+
+<a class="button"
+   href="/exports/{{ job.id }}">
+    Dettagli
+</a>
+
+{% if job.status == "COMPLETED" %}
+
+    {% if job.file_state == "available" %}
+
+        {% if can_export %}
+        <a class="button download"
+           href="/exports/{{ job.id }}/download">
+            Scarica
+        </a>
+        {% else %}
+        <span>
+            Disponibile
+        </span>
+        {% endif %}
+
+    {% elif job.file_state == "expired" %}
+
+        <span class="expired">
+            File scaduto
+        </span>
+
+    {% elif job.file_state == "missing" %}
+
+        <span class="expired">
+            File mancante
+        </span>
+
+    {% elif job.file_state == "integrity_failed" %}
+
+        <span class="expired">
+            Integrità fallita
+        </span>
+
+    {% else %}
+
+        <span class="expired">
+            File non disponibile
+        </span>
+
+    {% endif %}
+
+{% endif %}
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+</table>
+
+</div>
+
+{% else %}
+
+<div class="empty">
+    Non hai ancora richiesto alcun export.
+</div>
+
+{% endif %}
+
+</div>
+
+</main>
+
+</body>
+</html>

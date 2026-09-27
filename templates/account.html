@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Il mio account - Network Log Manager</title>
+
+<link rel="stylesheet" href="/static/css/navbar.css">
+
+<style>
+body {
+    margin: 0;
+    background: #080f1c;
+    color: #e5e7eb;
+    font-family: Arial, sans-serif;
+}
+.container {
+    max-width: 1000px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+h1 {
+    margin-bottom: 5px;
+}
+.subtitle {
+    color: #94a3b8;
+    margin-bottom: 25px;
+}
+.card {
+    background: #111b2e;
+    border: 1px solid #263449;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 22px;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 20px;
+}
+.field-label {
+    color: #94a3b8;
+    font-size: 12px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+}
+.field-value {
+    font-size: 16px;
+}
+.badge {
+    display: inline-block;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: bold;
+}
+.enabled {
+    background: #14532d;
+    color: #bbf7d0;
+}
+.disabled {
+    background: #7f1d1d;
+    color: #fecaca;
+}
+.mfa {
+    background: #1e3a8a;
+    color: #bfdbfe;
+}
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+}
+.button {
+    display: inline-block;
+    padding: 9px 14px;
+    border-radius: 7px;
+    background: #2563eb;
+    color: white;
+    text-decoration: none;
+}
+.button-secondary {
+    background: #334155;
+}
+@media(max-width:700px) {
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+</head>
+
+<body>
+
+{% set active_page = "" %}
+{% include "partials/navbar.html" %}
+
+<div class="container">
+
+<h1>Il mio account</h1>
+
+<div class="subtitle">
+    Informazioni e impostazioni del tuo account.
+</div>
+
+<div class="card">
+
+<h2>Profilo</h2>
+
+<div class="grid">
+
+<div>
+<div class="field-label">Username</div>
+<div class="field-value">
+    {{ account.username }}
+</div>
+</div>
+
+<div>
+<div class="field-label">Nome visualizzato</div>
+<div class="field-value">
+    {{ account.display_name or "-" }}
+</div>
+</div>
+
+<div>
+<div class="field-label">E-mail</div>
+<div class="field-value">
+    {{ account.email or "-" }}
+</div>
+</div>
+
+<div>
+<div class="field-label">Ruolo</div>
+<div class="field-value">
+    {{ account.roles or "-" }}
+</div>
+</div>
+
+<div>
+<div class="field-label">Stato account</div>
+<div class="field-value">
+{% if account.enabled %}
+<span class="badge enabled">Attivo</span>
+{% else %}
+<span class="badge disabled">Disabilitato</span>
+{% endif %}
+</div>
+</div>
+
+<div>
+<div class="field-label">Autenticazione 2FA</div>
+<div class="field-value">
+{% if account.mfa_enabled %}
+<span class="badge mfa">Attiva</span>
+{% else %}
+<span class="badge disabled">Non attiva</span>
+{% endif %}
+</div>
+</div>
+
+<div>
+<div class="field-label">Ultimo accesso</div>
+<div class="field-value">
+{% if account.last_login_at %}
+{{ account.last_login_at.strftime('%d/%m/%Y %H:%M:%S') }}
+{% else %}
+-
+{% endif %}
+</div>
+</div>
+
+<div>
+<div class="field-label">Password modificata</div>
+<div class="field-value">
+{{ account.password_changed_at.strftime('%d/%m/%Y %H:%M:%S') }}
+</div>
+</div>
+
+<div>
+<div class="field-label">Account creato</div>
+<div class="field-value">
+{{ account.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+</div>
+</div>
+
+</div>
+
+<div class="actions">
+
+<a href="/account/password"
+   class="button">
+    Cambia password
+</a>
+
+<a href="/account/security"
+   class="button button-secondary">
+    Sicurezza / 2FA
+</a>
+
+</div>
+
+</div>
+
+</div>
+</body>
+</html>
