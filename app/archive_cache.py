@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .archive_search import get_archive, parse_tuple_line, normalize_protocol
+from .storage_registry import materialize_from_fallback
 
 
 CACHE_ROOT = Path("/var/cache/netlog-manager/history")
@@ -180,17 +181,19 @@ def build_cache(
         archive["archive_path"]
     )
 
+    expected_sha = archive.get("sha256")
     if not archive_path.is_file():
-        raise ArchiveCacheError(
-            f"File non trovato: {archive_path}"
-        )
+        try:
+            root=Path("/archive/mikrotik")
+            relative=str(archive_path.relative_to(root))
+            materialize_from_fallback(relative,archive_path,expected_sha)
+        except Exception as exc:
+            raise ArchiveCacheError(f"File non trovato su primary/fallback: {archive_path}: {exc}") from exc
 
     expected_rows = archive.get("row_count")
 
     if expected_rows is not None:
         expected_rows = int(expected_rows)
-
-    expected_sha = archive.get("sha256")
 
     CACHE_ROOT.mkdir(
         parents=True,
