@@ -4229,8 +4229,12 @@ def admin_storage_browse(request: Request, csrf: str=Form(...), storage_type: st
     if not session or not is_administrator(session): return JSONResponse({"error":"Forbidden"},status_code=403)
     if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
     cfg={"type":storage_type,"host":host,"port":port,"share":share,"path":path,"domain":domain}
+    secret={"username":username,"password":password}
+    if not username and not password:
+        try: secret=decrypt_secret(_admin_storage_context().get("external_storage_secret",""))
+        except Exception: secret={}
     try:
-        folders=storage_browse(cfg,{"username":username,"password":password},folder)
+        folders=storage_browse(cfg,secret,folder)
         return {"ok":True,"folder":folder,"folders":folders}
     except Exception as exc:
         return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
@@ -4242,6 +4246,9 @@ def admin_storage_test(request: Request, csrf: str=Form(...), storage_type: str=
     if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
     cfg={"type":storage_type,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip()}
     secret={"username":username,"password":password}
+    if not username and not password:
+        try: secret=decrypt_secret(_admin_storage_context().get("external_storage_secret",""))
+        except Exception: secret={}
     try:
         result=storage_integrity_test(cfg,secret,folder)
     except Exception as exc:
