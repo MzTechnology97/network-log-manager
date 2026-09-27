@@ -62,12 +62,24 @@ log "Building and starting database"
 cd "$ROOT"
 "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" up -d --build db
 
-log "Waiting for MariaDB"
-for _ in {1..60}; do
-  if "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec -T db mariadb-admin ping -uroot "-p$DB_ROOT_PASSWORD" --silent >/dev/null 2>&1; then break; fi
+log "Waiting for MariaDB initialization to complete"
+db_ready=0
+for _ in {1..90}; do
+  # Do not use mariadb-admin ping here: during first initialization it can
+  # report the temporary bootstrap server as alive before the configured
+  # root credentials are active. Require an authenticated SQL query instead.
+  if "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec -T db \
+      mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -B -e "SELECT 1" >/dev/null 2>&1; then
+    db_ready=1
+    break
+  fi
   sleep 2
 done
-"${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec -T db mariadb-admin ping -uroot "-p$DB_ROOT_PASSWORD" --silent >/dev/null || die "MariaDB did not become ready."
+if [[ "$db_ready" != "1" ]]; then
+  "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" ps db >&2 || true
+  "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" logs --tail=80 db >&2 || true
+  die "MariaDB did not complete initialization within 180 seconds."
+fi
 
 log "Provisioning Docker databases and least-privilege users"
 sql_escape(){ printf '%s' "$1" | sed "s/'/''/g"; }
