@@ -17,7 +17,7 @@ id netlog >/dev/null 2>&1 || useradd --system --home /var/lib/netlog-manager --s
 install -d -o netlog -g netlog -m 0750 /opt/netlog-manager /var/lib/netlog-manager /var/log/netlog-manager
 install -d -o netlog -g netlog -m 0750 /var/cache/netlog-manager/history /var/cache/netlog-manager/exports
 install -d -o root -g netlog -m 0750 /etc/netlog-manager
-install -d -o root -g root -m 0750 "$ARCHIVE_ROOT"
+install -d -o root -g netlog -m 0750 "$ARCHIVE_ROOT"
 
 log "Provisioning least-privilege database accounts"
 "$ROOT/scripts/provision-db.sh"
@@ -28,7 +28,52 @@ log "Applying database migrations"
 log "Rendering syslog-ng configuration"
 "$ROOT/scripts/render-syslog-ng.sh"
 
+log "Deploying application source"
+rsync -a --delete "$ROOT/app/" /opt/netlog-manager/app/
+rsync -a --delete "$ROOT/templates/" /opt/netlog-manager/templates/
+install -m 0755 "$ROOT/create-admin.py" /opt/netlog-manager/create-admin.py
+install -m 0644 "$ROOT/requirements.txt" /opt/netlog-manager/requirements.txt
+
+python3 -m venv /opt/netlog-manager/venv
+/opt/netlog-manager/venv/bin/pip install --disable-pip-version-check --upgrade pip
+/opt/netlog-manager/venv/bin/pip install --disable-pip-version-check -r /opt/netlog-manager/requirements.txt
+
+install -d -o root -g netlog -m 0750 /opt/netlog-manager/config
+cat > /opt/netlog-manager/config/app.env <<EOF
+NETLOG_DB_HOST=127.0.0.1
+NETLOG_DB_USER=netlog_app
+NETLOG_DB_PASSWORD=$NETLOG_APP_PASSWORD
+NETLOG_DB_NAME=netlog_manager
+SYSLOG_DB_HOST=127.0.0.1
+SYSLOG_DB_USER=netlog_reader
+SYSLOG_DB_PASSWORD=$NETLOG_READER_PASSWORD
+SYSLOG_DB_NAME=syslogdb
+SECRET_KEY=$SECRET_KEY
+ARCHIVE_ROOT=$ARCHIVE_ROOT
+EXPORT_ROOT=/var/cache/netlog-manager/exports
+LIVE_LOG=/var/log/network.log
+EOF
+chown root:netlog /opt/netlog-manager/config/app.env
+chmod 0640 /opt/netlog-manager/config/app.env
+chown -R root:root /opt/netlog-manager/app /opt/netlog-manager/templates /opt/netlog-manager/create-admin.py /opt/netlog-manager/requirements.txt
+chmod 0755 /opt/netlog-manager
+chmod 0644 /opt/netlog-manager/app/*.py
+
+log "Installing application systemd units"
+for unit in   netlog-manager.service   netlog-archive-cache.service netlog-archive-cache.timer   netlog-export-worker.service netlog-export-worker.path   netlog-export-cleanup.service netlog-export-cleanup.timer
+do
+  install -m 0644 "$ROOT/systemd/$unit" "/etc/systemd/system/$unit"
+done
+systemctl daemon-reload
+systemctl enable netlog-manager.service netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer
+
+log "Validating application import"
+/opt/netlog-manager/venv/bin/python -m compileall -q /opt/netlog-manager/app /opt/netlog-manager/create-admin.py
+
+systemctl restart netlog-manager.service
+systemctl start netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer
+
 log "Persistent archive: $ARCHIVE_ROOT"
 log "Disposable historical cache: /var/cache/netlog-manager/history"
-log "Native platform foundation installed without deleting existing database or archive data."
-log "Application source/systemd/Apache deployment is enabled after importing the sanitized reference source."
+log "Application runtime and background workers installed."
+log "Apache/HTTPS configuration and initial Administrator bootstrap are the next installation stage."
