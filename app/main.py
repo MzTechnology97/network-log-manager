@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from .database import app_db
 from .remote_storage import browse as storage_browse, integrity_test as storage_integrity_test, encrypt_secret, decrypt_secret
 from .metrics import collect_dashboard
+from .monitoring import send_channel
 from .explorer import search_nat, ExplorerError
 from .advanced_search import search_logs, AdvancedSearchError
 from .export_search import (
@@ -4309,3 +4310,20 @@ def admin_channel_simple(request: Request, csrf: str=Form(...), name: str=Form(.
             conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Notification+channel+created",status_code=303)
+
+
+@app.post("/admin/settings/channels/{channel_id}/test")
+def admin_channel_test(channel_id: int, request: Request, csrf: str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM notification_channels WHERE id=%s",(channel_id,)); channel=cur.fetchone()
+        if not channel: return RedirectResponse("/admin/settings?message=Channel+not+found",status_code=303)
+        send_channel(channel,"Network Log Manager - Test","Canale configurato correttamente. Questo è un messaggio di test.")
+    except Exception:
+        return RedirectResponse("/admin/settings?message=Notification+test+failed",status_code=303)
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+test+sent",status_code=303)
