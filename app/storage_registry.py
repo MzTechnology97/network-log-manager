@@ -49,17 +49,18 @@ def health_check(row, deep=False):
         free=total=None
         if row["storage_type"]=="LOCAL":
             usage=shutil.disk_usage(Path(row["base_path"])); free=usage.free; total=usage.total
-        status="HEALTHY"; error=None
+        status="HEALTHY"; error=None; failures=0
     except Exception as exc:
         latency=round((time.monotonic()-started)*1000,2); free=total=None
-        status="OFFLINE"; error=str(exc)[:1000]
+        failures=int(row.get("health_failures") or 0)+1
+        status="OFFLINE" if failures>=3 else "DEGRADED"; error=str(exc)[:1000]
     conn=app_db()
     try:
         with conn.cursor() as cur:
             cur.execute("""UPDATE storage_targets SET health_status=%s,last_health_at=NOW(3),
               last_success_at=IF(%s='HEALTHY',NOW(3),last_success_at),last_error=%s,latency_ms=%s,
-              free_bytes=%s,total_bytes=%s WHERE id=%s""",
-              (status,status,error,latency,free,total,row["id"])); conn.commit()
+              free_bytes=%s,total_bytes=%s,health_failures=%s WHERE id=%s""",
+              (status,status,error,latency,free,total,failures,row["id"])); conn.commit()
     finally: conn.close()
     return {"id":row["id"],"name":row["name"],"status":status,"latency_ms":latency,
             "error":error,"free_bytes":free,"total_bytes":total}
