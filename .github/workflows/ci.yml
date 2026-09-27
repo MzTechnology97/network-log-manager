@@ -5,17 +5,34 @@ on:
     branches: [main]
 permissions:
   contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Shell syntax
-        run: |
-          find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
-      - name: No committed secrets
-        run: |
-          ! grep -RInE --exclude='*.example' --exclude-dir=reference '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|DB_ROOT_PASSWORD=.+|SECRET_KEY=.+|NETLOG_.*PASSWORD=.+)' . | grep -v 'CHANGE_ME'
+        run: find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Python syntax
+        run: python3 -m compileall -q app create-admin.py
       - name: Migration naming
         run: |
-          find database/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | grep -Ev '^[0-9]{4}_[a-z0-9_-]+\.sql$' && exit 1 || true
+          bad="$(find database/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | grep -Ev '^[0-9]{4}_[a-z0-9_-]+\.sql$' || true)"
+          test -z "$bad" || { echo "$bad"; exit 1; }
+      - name: Migration immutability basics
+        run: |
+          test -s database/migrations/0001_reference_schema.sql
+          test -s database/migrations/0002_daily_log_tables.sql
+      - name: No committed private keys
+        run: |
+          ! grep -RInE --exclude-dir=.git --exclude-dir=reference 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' .
+      - name: No concrete secrets in product config
+        run: |
+          ! grep -RInE --exclude-dir=.git --exclude-dir=reference --exclude='*.example' '^(DB_ROOT_PASSWORD|SECRET_KEY|NETLOG_[A-Z_]*PASSWORD)=.{8,}$' .
+      - name: Requirements install
+        run: |
+          python3 -m venv /tmp/netlog-ci
+          /tmp/netlog-ci/bin/pip install -q -r requirements.txt
+      - name: Docker Compose validation
+        if: hashFiles('compose.yml') != ''
+        run: docker compose -f compose.yml config >/dev/null
