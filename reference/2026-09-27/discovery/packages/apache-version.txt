@@ -1,0 +1,5 @@
+# Command: apache2 -v
+# Date: 2026-09-27T09:59:54+02:00
+
+Server version: Apache/2.4.68 (Debian)
+Server built:   2026-06-12T05:08:45

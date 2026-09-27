@@ -1,0 +1,14 @@
+# Command: mariadb -N -e 
+SELECT
+ ROUTINE_SCHEMA,
+ ROUTINE_NAME,
+ ROUTINE_TYPE,
+ DEFINER,
+ SECURITY_TYPE
+FROM information_schema.ROUTINES
+WHERE ROUTINE_SCHEMA IN ('syslogdb','netlog_manager')
+ORDER BY ROUTINE_SCHEMA,ROUTINE_NAME;
+
+# Date: 2026-09-27T10:00:09+02:00
+
+syslogdb	CreateFutureTables	PROCEDURE	netlog_maintenance@localhost	DEFINER

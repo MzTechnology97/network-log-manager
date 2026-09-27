@@ -1,0 +1,2 @@
+GRANT USAGE ON *.* TO `netlog_ingest`@`localhost` IDENTIFIED BY PASSWORD '***REDACTED***'
+GRANT INSERT ON `syslogdb`.* TO `netlog_ingest`@`localhost`

@@ -1,0 +1,4 @@
+# Command: mariadb --version
+# Date: 2026-09-27T09:59:54+02:00
+
+mariadb  Ver 15.1 Distrib 10.11.18-MariaDB, for debian-linux-gnu (x86_64) using  EditLine wrapper

@@ -1,0 +1,355 @@
+#!/bin/bash
+
+set -uo pipefail
+
+DB="syslogdb"
+MYSQL=(mysql -u root)
+MYSQLDUMP=(mysqldump -u root)
+
+ARCHIVE_ROOT="/archive/mikrotik"
+ZSTD_LEVEL=6
+LOGFILE="/var/log/archive-mikrotik-logs.log"
+LOCKFILE="/run/lock/archive-mikrotik-logs.lock"
+
+DRY_RUN=0
+LIMIT=1
+ARCHIVED=0
+FAILED=0
+PROCESSED=0
+
+usage() {
+    echo "Uso:"
+    echo "  $0 --dry-run"
+    echo "  $0 --limit N"
+    echo "  $0 --all"
+    echo
+    echo "Default: --limit 1"
+    exit 1
+}
+
+log() {
+    local msg
+    msg="$(date '+%Y-%m-%d %H:%M:%S') $*"
+    echo "$msg"
+    echo "$msg" >> "$LOGFILE"
+}
+
+# ---------------------------
+# Argomenti
+# ---------------------------
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --limit)
+            [[ $# -ge 2 ]] || usage
+            [[ "$2" =~ ^[1-9][0-9]*$ ]] || {
+                echo "ERRORE: --limit richiede un numero > 0"
+                exit 1
+            }
+            LIMIT="$2"
+            shift 2
+            ;;
+        --all)
+            LIMIT=0
+            shift
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+
+# ---------------------------
+# Lock
+# ---------------------------
+
+exec 9>"$LOCKFILE"
+
+if ! flock -n 9; then
+    echo "ERRORE: un'altra istanza dello script è già in esecuzione."
+    exit 1
+fi
+
+# ---------------------------
+# Controlli preliminari
+# ---------------------------
+
+for cmd in mysql mysqldump zstd zstdcat sha256sum flock stat grep awk; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        log "ERRORE: comando '$cmd' non trovato."
+        exit 1
+    fi
+done
+
+mkdir -p "$ARCHIVE_ROOT"
+
+if ! "${MYSQL[@]}" -N -e "SELECT 1;" >/dev/null 2>&1; then
+    log "ERRORE: impossibile collegarsi a MariaDB."
+    exit 1
+fi
+
+CURRENT_YEAR=$(date '+%Y')
+CUTOFF_TABLE="mikrotik_logs_${CURRENT_YEAR}_01_01"
+
+log "============================================================"
+log "Avvio archiviazione"
+log "Anno corrente: $CURRENT_YEAR"
+log "Retention: tutte le tabelle dell'anno corrente restano online"
+log "Verranno considerate SOLO tabelle precedenti a: $CUTOFF_TABLE"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "Modalità: DRY-RUN"
+elif [[ "$LIMIT" -eq 0 ]]; then
+    log "Modalità: TUTTE le tabelle eleggibili"
+else
+    log "Modalità: massimo $LIMIT tabella/e"
+fi
+
+# Solo nomi giornalieri validi.
+# Esclude quindi eventuali _converted, backup, ecc.
+TABLES=$(
+    "${MYSQL[@]}" -N -B -e "
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema='${DB}'
+          AND table_name REGEXP '^mikrotik_logs_[0-9]{4}_[0-9]{2}_[0-9]{2}$'
+          AND table_name < '${CUTOFF_TABLE}'
+        ORDER BY table_name ASC;
+    "
+)
+
+if [[ -z "$TABLES" ]]; then
+    log "Nessuna tabella da archiviare."
+    exit 0
+fi
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    COUNT=$(printf '%s\n' "$TABLES" | grep -c '^mikrotik_logs_')
+
+    log "Tabelle eleggibili: $COUNT"
+    echo
+    printf '%s\n' "$TABLES"
+    echo
+    log "DRY-RUN completato. Nessuna modifica effettuata."
+    exit 0
+fi
+
+# ---------------------------
+# Archiviazione
+# ---------------------------
+
+while IFS= read -r TABLE; do
+
+    [[ -n "$TABLE" ]] || continue
+
+    if [[ "$LIMIT" -ne 0 && "$PROCESSED" -ge "$LIMIT" ]]; then
+        break
+    fi
+
+    ((PROCESSED++))
+    
+    # Ulteriore validazione del nome.
+    if [[ ! "$TABLE" =~ ^mikrotik_logs_([0-9]{4})_([0-9]{2})_([0-9]{2})$ ]]; then
+        log "SKIP: nome tabella non valido: $TABLE"
+        continue
+    fi
+
+    YEAR="${BASH_REMATCH[1]}"
+    MONTH="${BASH_REMATCH[2]}"
+    DAY="${BASH_REMATCH[3]}"
+
+    DESTDIR="$ARCHIVE_ROOT/$YEAR/$MONTH"
+    FINAL="$DESTDIR/$TABLE.sql.zst"
+    TEMP="$DESTDIR/.$TABLE.sql.zst.tmp"
+    META="$DESTDIR/$TABLE.meta"
+    SHA="$DESTDIR/$TABLE.sql.zst.sha256"
+
+    mkdir -p "$DESTDIR"
+
+    log "------------------------------------------------------------"
+    log "Elaborazione: $TABLE"
+
+    # Non sovrascriviamo mai automaticamente un archivio esistente.
+    if [[ -e "$FINAL" ]]; then
+        log "SKIP: archivio già esistente: $FINAL"
+        continue
+    fi
+
+    rm -f "$TEMP"
+
+    # Verifica che la tabella esista ancora.
+    EXISTS=$(
+        "${MYSQL[@]}" -N -B -e "
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_schema='${DB}'
+              AND table_name='${TABLE}';
+        "
+    )
+
+    if [[ "$EXISTS" != "1" ]]; then
+        log "SKIP: la tabella $TABLE non esiste più."
+        continue
+    fi
+
+    log "Conteggio righe..."
+
+    if ! ROWS=$(
+        "${MYSQL[@]}" -N -B "$DB" -e \
+        "SELECT COUNT(*) FROM \`${TABLE}\`;"
+    ); then
+        log "ERRORE: impossibile contare le righe di $TABLE."
+        ((FAILED++))
+        continue
+    fi
+
+    if [[ ! "$ROWS" =~ ^[0-9]+$ ]]; then
+        log "ERRORE: conteggio righe non valido per $TABLE: $ROWS"
+        ((FAILED++))
+        continue
+    fi
+
+    log "Righe: $ROWS"
+    log "Creazione dump compresso..."
+
+    # pipefail permette di intercettare anche un errore di mysqldump.
+    if ! "${MYSQLDUMP[@]}" \
+        --single-transaction \
+        --quick \
+        --skip-lock-tables \
+        --default-character-set=utf8mb4 \
+        "$DB" "$TABLE" \
+        | zstd -T0 "-${ZSTD_LEVEL}" -q -o "$TEMP"
+    then
+        log "ERRORE: dump/compressione falliti per $TABLE."
+        rm -f "$TEMP"
+        ((FAILED++))
+        continue
+    fi
+
+    if [[ ! -s "$TEMP" ]]; then
+        log "ERRORE: archivio temporaneo vuoto."
+        rm -f "$TEMP"
+        ((FAILED++))
+        continue
+    fi
+
+    log "Verifica integrità Zstandard..."
+
+    if ! zstd -t -q "$TEMP"; then
+        log "ERRORE: verifica zstd fallita per $TABLE."
+        rm -f "$TEMP"
+        ((FAILED++))
+        continue
+    fi
+
+    log "Verifica presenza CREATE TABLE..."
+
+    if ! zstdcat "$TEMP" | grep -F "CREATE TABLE \`$TABLE\`" >/dev/null; then
+        log "ERRORE: CREATE TABLE non trovato nel dump."
+        rm -f "$TEMP"
+        ((FAILED++))
+        continue
+    fi
+
+    log "Verifica presenza dati..."
+
+    # Per una tabella non vuota deve esistere almeno un INSERT.
+    if [[ "$ROWS" -gt 0 ]]; then
+        if ! zstdcat "$TEMP" | grep -F "INSERT INTO \`$TABLE\`" >/dev/null; then
+            log "ERRORE: nessun INSERT trovato nel dump."
+            rm -f "$TEMP"
+            ((FAILED++))
+            continue
+        fi
+    fi
+
+    # Solo ora il file temporaneo diventa archivio definitivo.
+    mv "$TEMP" "$FINAL"
+
+    HASH=$(sha256sum "$FINAL" | awk '{print $1}')
+    COMPRESSED_BYTES=$(stat -c '%s' "$FINAL")
+
+    # zstd -l restituisce la dimensione decompressa nell'ultima colonna
+    # nelle versioni Debian correnti; se non disponibile lasciamo N/A.
+    UNCOMPRESSED_BYTES=$(
+        zstd -l "$FINAL" 2>/dev/null |
+        awk 'NR==3 {print $4}' |
+        head -n1
+    )
+
+    [[ -n "$UNCOMPRESSED_BYTES" ]] || UNCOMPRESSED_BYTES="N/A"
+
+    cat > "$META" <<EOF
+TABLE=$TABLE
+DATE=$YEAR-$MONTH-$DAY
+ROWS=$ROWS
+COMPRESSED_BYTES=$COMPRESSED_BYTES
+UNCOMPRESSED_BYTES=$UNCOMPRESSED_BYTES
+SHA256=$HASH
+ARCHIVED_AT=$(date --iso-8601=seconds)
+RETENTION_POLICY=current_year
+EOF
+
+    echo "$HASH  $(basename "$FINAL")" > "$SHA"
+
+    log "Archivio creato: $FINAL"
+    log "Dimensione: $COMPRESSED_BYTES bytes"
+    log "SHA256: $HASH"
+
+    # Verifica finale del checksum appena scritto.
+    if ! (
+        cd "$DESTDIR" &&
+        sha256sum -c "$(basename "$SHA")" >/dev/null
+    ); then
+        log "ERRORE CRITICO: verifica SHA256 fallita."
+        log "La tabella NON verrà eliminata."
+        ((FAILED++))
+        continue
+    fi
+
+    # Ultima verifica: tabella ancora presente.
+    EXISTS=$(
+        "${MYSQL[@]}" -N -B -e "
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_schema='${DB}'
+              AND table_name='${TABLE}';
+        "
+    )
+
+    if [[ "$EXISTS" != "1" ]]; then
+        log "ATTENZIONE: $TABLE non esiste più prima del DROP."
+        ((FAILED++))
+        continue
+    fi
+
+    log "Archivio verificato. Eliminazione tabella originale..."
+
+    if ! "${MYSQL[@]}" "$DB" -e "DROP TABLE \`${TABLE}\`;"; then
+        log "ERRORE: DROP TABLE fallito. Archivio conservato."
+        ((FAILED++))
+        continue
+    fi
+
+    ((ARCHIVED++))
+
+    log "OK: $TABLE archiviata e rimossa da MariaDB."
+    log "Tabelle archiviate in questa esecuzione: $ARCHIVED"
+
+done <<< "$TABLES"
+
+log "============================================================"
+log "Operazione terminata."
+log "Archiviate: $ARCHIVED"
+log "Errori: $FAILED"
+
+if [[ "$FAILED" -gt 0 ]]; then
+    exit 2
+fi
+
+exit 0

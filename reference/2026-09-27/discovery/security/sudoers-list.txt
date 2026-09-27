@@ -1,0 +1,8 @@
+# Command: bash -c 
+find /etc/sudoers /etc/sudoers.d -maxdepth 1 -type f \
+    -printf "%M %u %g %p\n" 2>/dev/null
+
+# Date: 2026-09-27T10:00:16+02:00
+
+-r--r----- root root /etc/sudoers
+-r--r----- root root /etc/sudoers.d/README

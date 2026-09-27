@@ -1,0 +1,1 @@
+settings	CREATE TABLE `settings` (\n  `setting_key` varchar(128) NOT NULL,\n  `setting_value` text DEFAULT NULL,\n  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),\n  PRIMARY KEY (`setting_key`)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

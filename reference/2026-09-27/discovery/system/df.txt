@@ -1,0 +1,11 @@
+# Command: df -hT
+# Date: 2026-09-27T09:59:51+02:00
+
+File system    Tipo      Dim. Usati Dispon. Uso% Montato su
+udev           devtmpfs  1,9G     0    1,9G   0% /dev
+tmpfs          tmpfs     392M  1,3M    391M   1% /run
+/dev/sda1      ext4     1006G   86G    870G   9% /
+tmpfs          tmpfs     2,0G   80K    2,0G   1% /dev/shm
+tmpfs          tmpfs     5,0M     0    5,0M   0% /run/lock
+tmpfs          tmpfs     392M   68K    392M   1% /run/user/116
+tmpfs          tmpfs     392M   52K    392M   1% /run/user/0

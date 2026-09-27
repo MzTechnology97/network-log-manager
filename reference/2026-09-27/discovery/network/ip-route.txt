@@ -1,0 +1,5 @@
+# Command: ip route show
+# Date: 2026-09-27T09:59:55+02:00
+
+default via 172.31.0.1 dev ens192 proto static metric 100 
+172.31.0.0/24 dev ens192 proto kernel scope link src 172.31.0.26 metric 100 

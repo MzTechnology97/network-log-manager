@@ -1,0 +1,2 @@
+GRANT USAGE ON *.* TO `netlog_reader`@`localhost` IDENTIFIED BY PASSWORD '***REDACTED***'
+GRANT SELECT ON `syslogdb`.* TO `netlog_reader`@`localhost`

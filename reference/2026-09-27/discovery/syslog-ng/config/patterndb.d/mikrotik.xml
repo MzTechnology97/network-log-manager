@@ -1,0 +1,18 @@
+<patterndb version='4' pub_date='2025-02-24'>
+  <ruleset name='mikrotik' id='mikrotik_logs'>
+    <pattern>user_conn_radiusmanager conn-lo: in:* src-mac @MACADDR:STRING: @ proto @PROTO:STRING: @ @SRCIP:IP: @:@SRCPORT:INT:->@DSTIP:IP: @:@DSTPORT:INT:</pattern>
+    <rule provider='mikrotik' id='mikrotik_conn_log'>
+      <patterns>
+        <pattern>user_conn_radiusmanager conn-lo: in:* src-mac @MACADDR:STRING: @ proto @PROTO:STRING: @ @SRCIP:IP: @:@SRCPORT:INT:->@DSTIP:IP: @:@DSTPORT:INT:</pattern>
+      </patterns>
+      <values>
+        <value name='MACADDR'>@MACADDR</value>
+        <value name='PROTO'>@PROTO</value>
+        <value name='SRCIP'>@SRCIP</value>
+        <value name='SRCPORT'>@SRCPORT</value>
+        <value name='DSTIP'>@DSTIP</value>
+        <value name='DSTPORT'>@DSTPORT</value>
+      </values>
+    </rule>
+  </ruleset>
+</patterndb>

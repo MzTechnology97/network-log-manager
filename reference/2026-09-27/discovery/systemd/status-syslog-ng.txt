@@ -1,0 +1,22 @@
+● syslog-ng.service - System Logger Daemon
+     Loaded: loaded (/lib/systemd/system/syslog-ng.service; enabled; preset: enabled)
+     Active: active (running) since Tue 2026-09-22 11:45:08 CEST; 4 days ago
+       Docs: man:syslog-ng(8)
+    Process: 3944847 ExecReload=/bin/kill -HUP $MAINPID (code=exited, status=0/SUCCESS)
+   Main PID: 1491138 (syslog-ng)
+      Tasks: 4 (limit: 4631)
+     Memory: 162.0M
+        CPU: 1h 37min 8.947s
+     CGroup: /system.slice/syslog-ng.service
+             └─1491138 /usr/sbin/syslog-ng -F
+
+set 23 17:57:15 syslog-ng systemd[1]: Reloading syslog-ng.service - System Logger Daemon...
+set 23 17:57:15 syslog-ng systemd[1]: Reloaded syslog-ng.service - System Logger Daemon.
+set 23 17:58:20 syslog-ng systemd[1]: Reloading syslog-ng.service - System Logger Daemon...
+set 23 17:58:20 syslog-ng systemd[1]: Reloaded syslog-ng.service - System Logger Daemon.
+set 25 16:00:24 syslog-ng systemd[1]: Reloading syslog-ng.service - System Logger Daemon...
+set 25 16:00:24 syslog-ng systemd[1]: Reloaded syslog-ng.service - System Logger Daemon.
+set 26 12:27:12 syslog-ng systemd[1]: Reloading syslog-ng.service - System Logger Daemon...
+set 26 12:27:12 syslog-ng systemd[1]: Reloaded syslog-ng.service - System Logger Daemon.
+set 27 00:00:12 syslog-ng systemd[1]: Reloading syslog-ng.service - System Logger Daemon...
+set 27 00:00:12 syslog-ng systemd[1]: Reloaded syslog-ng.service - System Logger Daemon.

@@ -1,0 +1,6 @@
+# Command: bash -c 
+docker --version 2>/dev/null || true
+docker compose version 2>/dev/null || true
+
+# Date: 2026-09-27T09:59:54+02:00
+

@@ -1,0 +1,54 @@
+  File: /opt/netlog-manager
+  Dim.: 4096      	Blocchi: 8          Blocco di IO: 4096   directory
+Device: 8,1	Inode: 33030146    Links: 7
+Accesso: (0755/drwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)
+Accesso  : 2026-09-26 18:26:18.698259828 +0200
+Modifica : 2026-09-25 18:21:07.958875008 +0200
+Cambio   : 2026-09-25 18:21:07.958875008 +0200
+Creazione: 2026-09-25 15:54:58.943639764 +0200
+
+  File: /var/lib/netlog-manager
+  Dim.: 4096      	Blocchi: 8          Blocco di IO: 4096   directory
+Device: 8,1	Inode: 49283182    Links: 2
+Accesso: (0755/drwxr-xr-x)  Uid: (  997/  netlog)   Gid: (  996/  netlog)
+Accesso  : 2026-09-27 10:00:13.327707522 +0200
+Modifica : 2026-09-26 10:38:51.004591321 +0200
+Cambio   : 2026-09-26 10:38:51.004591321 +0200
+Creazione: 2026-09-25 15:54:58.967640533 +0200
+
+  File: /var/log/netlog-manager
+  Dim.: 4096      	Blocchi: 8          Blocco di IO: 4096   directory
+Device: 8,1	Inode: 49283183    Links: 2
+Accesso: (0755/drwxr-xr-x)  Uid: (  997/  netlog)   Gid: (  996/  netlog)
+Accesso  : 2026-09-27 10:00:13.339707895 +0200
+Modifica : 2026-09-25 15:54:58.967640533 +0200
+Cambio   : 2026-09-25 16:30:59.808088515 +0200
+Creazione: 2026-09-25 15:54:58.967640533 +0200
+
+  File: /var/cache/netlog-manager
+  Dim.: 4096      	Blocchi: 8          Blocco di IO: 4096   directory
+Device: 8,1	Inode: 49283184    Links: 4
+Accesso: (0755/drwxr-xr-x)  Uid: (  997/  netlog)   Gid: (  996/  netlog)
+Accesso  : 2026-09-27 10:00:13.351708269 +0200
+Modifica : 2026-09-25 17:47:20.614281173 +0200
+Cambio   : 2026-09-25 17:47:20.614281173 +0200
+Creazione: 2026-09-25 15:54:58.967640533 +0200
+
+  File: /archive/mikrotik
+  Dim.: 4096      	Blocchi: 8          Blocco di IO: 4096   directory
+Device: 8,1	Inode: 48758786    Links: 5
+Accesso: (0755/drwxr-xr-x)  Uid: (    0/    root)   Gid: (    0/    root)
+Accesso  : 2026-09-26 16:21:29.159288855 +0200
+Modifica : 2026-09-22 18:30:04.152083644 +0200
+Cambio   : 2026-09-22 18:30:04.152083644 +0200
+Creazione: 2026-09-22 12:09:18.912889761 +0200
+
+  File: /var/log/network.log
+  Dim.: 62891373  	Blocchi: 122848     Blocco di IO: 4096   file regolare
+Device: 8,1	Inode: 47978575    Links: 1
+Accesso: (0640/-rw-r-----)  Uid: (    0/    root)   Gid: (  996/  netlog)
+Accesso  : 2026-09-27 00:00:12.065669123 +0200
+Modifica : 2026-09-27 10:00:16.051792301 +0200
+Cambio   : 2026-09-27 10:00:16.051792301 +0200
+Creazione: 2026-09-27 00:00:12.065669123 +0200
+

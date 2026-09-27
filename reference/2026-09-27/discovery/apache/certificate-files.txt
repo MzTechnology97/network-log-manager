@@ -1,0 +1,4 @@
+-rw-r--r-- root root 1781 2026-09-26 11:56:11.0935778300 /etc/ssl/netlog-manager/netlog-manager.crt
+-rw-r--r-- root root 1866 2026-09-26 11:56:08.3174872540 /etc/ssl/netlog-manager/netlog-manager-ca.crt
+-rw-r--r-- root root 1050 2025-02-19 17:57:22.8389433130 /etc/ssl/certs/ssl-cert-snakeoil.pem
+-rw-r--r-- root root 213777 2025-02-24 15:23:35.9991479850 /etc/ssl/certs/ca-certificates.crt

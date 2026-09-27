@@ -1,0 +1,28 @@
+<patterndb version='5' pub_date='2025-02-24'>
+  <ruleset name='mikrotik' id='1'>
+    <description>PatternDB per parsing log Mikrotik</description>
+    <patterns>
+      <pattern>user_conn_radiusmanager conn-lo: *</pattern>
+    </patterns>
+    <rules>
+      <rule provider='mikrotik' id='mikrotik-parser' class='system'>
+        <patterns>
+          <pattern>user_conn_radiusmanager conn-lo: in:%INIF out:%OUTIF, connection-state:%STATE src-mac %{MACADDR}, proto %{PROTO}, %{SRCIP}:%{SRCPORT}->%{DSTIP}:%{DSTPORT}, len %{LEN}</pattern>
+        </patterns>
+        <values>
+          <value name='PROGRAM'>user_conn_radiusmanager</value>
+          <value name='INIF'>${INIF}</value>
+          <value name='OUTIF'>${OUTIF}</value>
+          <value name='STATE'>${STATE}</value>
+          <value name='MACADDR'>${MACADDR}</value>
+          <value name='PROTO'>${PROTO}</value>
+          <value name='SRCIP'>${SRCIP}</value>
+          <value name='SRCPORT'>${SRCPORT}</value>
+          <value name='DSTIP'>${DSTIP}</value>
+          <value name='DSTPORT'>${DSTPORT}</value>
+          <value name='LEN'>${LEN}</value>
+        </values>
+      </rule>
+    </rules>
+  </ruleset>
+</patterndb>

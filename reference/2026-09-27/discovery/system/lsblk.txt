@@ -1,0 +1,9 @@
+# Command: lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS,UUID
+# Date: 2026-09-27T09:59:51+02:00
+
+NAME    SIZE FSTYPE  MOUNTPOINTS UUID
+sda       1T                     
+├─sda1 1023G ext4    /           02d73e80-15d6-47b6-a4c3-0910b51e5c7d
+├─sda2    1K                     
+└─sda5  975M swap    [SWAP]      dc33df76-371e-4cb5-81b9-f075907311ad
+sr0     388M iso9660             2022-12-17-10-46-11-00

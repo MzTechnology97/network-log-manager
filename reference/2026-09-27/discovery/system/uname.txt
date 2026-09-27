@@ -1,0 +1,4 @@
+# Command: uname -a
+# Date: 2026-09-27T09:59:50+02:00
+
+Linux syslog-ng 6.1.0-31-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.1.128-1 (2025-02-07) x86_64 GNU/Linux

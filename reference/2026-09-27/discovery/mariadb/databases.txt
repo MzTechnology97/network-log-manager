@@ -1,0 +1,13 @@
+# Command: mariadb -N -e 
+SELECT SCHEMA_NAME
+FROM information_schema.SCHEMATA
+ORDER BY SCHEMA_NAME;
+
+# Date: 2026-09-27T10:00:08+02:00
+
+information_schema
+mysql
+netlog_manager
+performance_schema
+sys
+syslogdb

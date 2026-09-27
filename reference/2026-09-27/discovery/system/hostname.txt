@@ -1,0 +1,15 @@
+# Command: hostnamectl
+# Date: 2026-09-27T09:59:49+02:00
+
+ Static hostname: syslog-ng
+       Icon name: computer-vm
+         Chassis: vm 🖴
+      Machine ID: 5c0b134e055f4007a30b18f5fb1accac
+         Boot ID: 1dfa155fda4f480abd4b60421ce880eb
+  Virtualization: vmware
+Operating System: Debian GNU/Linux 12 (bookworm)
+          Kernel: Linux 6.1.0-31-amd64
+    Architecture: x86-64
+ Hardware Vendor: VMware, Inc.
+  Hardware Model: VMware Virtual Platform
+Firmware Version: 6.00

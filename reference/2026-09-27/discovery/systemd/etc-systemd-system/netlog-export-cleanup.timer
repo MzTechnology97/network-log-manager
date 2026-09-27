@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Network Log Manager export cleanup
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=netlog-export-cleanup.service
+
+[Install]
+WantedBy=timers.target

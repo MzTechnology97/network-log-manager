@@ -1,0 +1,22 @@
+# Command: apache2ctl -S
+# Date: 2026-09-27T10:00:10+02:00
+
+VirtualHost configuration:
+*:80                   netlog-manager.local (/etc/apache2/sites-enabled/netlog-manager.conf:1)
+*:443                  netlog-manager.local (/etc/apache2/sites-enabled/netlog-manager.conf:11)
+ServerRoot: "/etc/apache2"
+Main DocumentRoot: "/var/www/html"
+Main ErrorLog: "/var/log/apache2/error.log"
+Mutex watchdog-callback: using_defaults
+Mutex rewrite-map: using_defaults
+Mutex ssl-stapling-refresh: using_defaults
+Mutex ssl-stapling: using_defaults
+Mutex proxy: using_defaults
+Mutex ssl-cache: using_defaults
+Mutex default: dir="/var/run/apache2/" mechanism=default 
+Mutex mpm-accept: using_defaults
+PidFile: "/var/run/apache2/apache2.pid"
+Define: DUMP_VHOSTS
+Define: DUMP_RUN_CFG
+User: name="www-data" id=33
+Group: name="www-data" id=33
