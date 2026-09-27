@@ -3,6 +3,8 @@
 ## Italiano
 Il progetto separa gli account MariaDB per funzione: applicazione CRUD su `netlog_manager`, reader SELECT su `syslogdb`, ingest INSERT su `syslogdb`, maintenance per creazione tabelle e routine. L'interfaccia supporta ruoli Administrator, Operator e Auditor, sessioni server-side, Argon2id, TOTP MFA, CSRF, lockout e cookie Secure/HttpOnly/SameSite.
 
+Le credenziali degli storage remoti e dei canali di notifica sono separate dalla configurazione visibile; i secret cifrati non vengono mostrati nuovamente dalla UI. I test storage verificano scrittura, rilettura, SHA-256 e cancellazione del file temporaneo prima dell'attivazione.
+
 I secret non devono essere inseriti nel repository. I file runtime sotto `/etc/netlog-manager` e lo stato Docker devono rimanere protetti. TLS self-signed è disponibile al bootstrap; in produzione è preferibile un certificato della PKI aziendale o pubblicamente attendibile. HSTS non è abilitato per default.
 
 ## English
