@@ -71,3 +71,36 @@ jobs:
       - name: Docker image build
         env: *docker-env
         run: docker compose build app syslog proxy
+      - name: Docker syslog configuration syntax
+        env: *docker-env
+        run: |
+          docker compose run --rm --no-deps --entrypoint sh syslog -c '/usr/local/bin/netlog-syslog-entrypoint --version >/dev/null 2>&1 || true'
+          docker compose run --rm --no-deps --entrypoint sh syslog -c 'python3 - <<"PY"
+          import os
+          from pathlib import Path
+          src=Path("/etc/syslog-ng/syslog-ng.conf.template").read_text()
+          pw=os.environ["NETLOG_INGEST_PASSWORD"].replace("\\","\\\\").replace(chr(34),"\\\"")
+          Path("/tmp/syslog-ng.conf").write_text(src.replace("@@NETLOG_INGEST_PASSWORD@@",pw))
+          PY
+          syslog-ng -s -f /tmp/syslog-ng.conf'
+      - name: Docker stack integration
+        env: *docker-env
+        run: |
+          mkdir -p /tmp/netlog-archive /tmp/netlog-tls
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 -keyout /tmp/netlog-tls/netlog-manager.key -out /tmp/netlog-tls/netlog-manager.crt -subj "/CN=netlog-manager.local" >/dev/null 2>&1
+          docker compose up -d db
+          for i in $(seq 1 30); do docker compose exec -T db mariadb-admin ping -uroot -pci-root-password --silent && break; sleep 2; done
+          docker compose exec -T db mariadb -uroot -pci-root-password -e "CREATE DATABASE IF NOT EXISTS netlog_manager; CREATE DATABASE IF NOT EXISTS syslogdb; CREATE USER IF NOT EXISTS 'netlog_app'@'%' IDENTIFIED BY 'ci-app-password'; CREATE USER IF NOT EXISTS 'netlog_reader'@'%' IDENTIFIED BY 'ci-reader-password'; CREATE USER IF NOT EXISTS 'netlog_ingest'@'%' IDENTIFIED BY 'ci-ingest-password'; GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%'; GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%'; GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%';"
+          for f in database/migrations/*.sql; do docker compose exec -T db mariadb -uroot -pci-root-password < "$f"; done
+          docker compose up -d app syslog proxy
+          for i in $(seq 1 30); do curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null && break; sleep 2; done
+          curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null
+          docker compose ps
+      - name: Docker logs on failure
+        if: failure()
+        env: *docker-env
+        run: docker compose logs --no-color --tail=200
+      - name: Docker cleanup
+        if: always()
+        env: *docker-env
+        run: docker compose down -v --remove-orphans
