@@ -323,6 +323,8 @@ def collect_dashboard():
     archive_bytes = archive_size()
     open_alerts = 0
     active_alerts = []
+    storage_targets = []
+    replication = {"pending":0,"failed":0}
     try:
         alert_conn = app_db()
         with alert_conn.cursor() as cur:
@@ -330,6 +332,13 @@ def collect_dashboard():
             open_alerts = int(cur.fetchone()['c'])
             cur.execute("SELECT severity,title,message,last_seen_at FROM system_alerts WHERE resolved_at IS NULL ORDER BY last_seen_at DESC LIMIT 5")
             active_alerts = cur.fetchall()
+            cur.execute("""SELECT id,name,storage_type,role,enabled,read_fallback,health_status,last_health_at,last_success_at,last_error,latency_ms,free_bytes,total_bytes,test_status
+                           FROM storage_targets ORDER BY role='PRIMARY' DESC,id""")
+            storage_targets = cur.fetchall()
+            cur.execute("""SELECT
+                SUM(status='PENDING') AS pending,SUM(status='FAILED') AS failed
+                FROM storage_replication_state""")
+            rr=cur.fetchone() or {}; replication={"pending":int(rr.get("pending") or 0),"failed":int(rr.get("failed") or 0)}
         alert_conn.close()
     except Exception:
         pass
@@ -439,10 +448,8 @@ def collect_dashboard():
             "archive_disk_percent": round(archive_disk.used / archive_disk.total * 100, 1) if archive_disk and archive_disk.total else None,
             "open_alerts": open_alerts,
             "active_alerts": active_alerts,
-            "remote_type": cfg.get("external_storage_type","LOCAL"),
-            "remote_enabled": cfg.get("external_storage_enabled","0") == "1",
-            "remote_test_status": cfg.get("external_storage_test_status","NOT_TESTED"),
-            "remote_tested_at": cfg.get("external_storage_tested_at") or None,
-            "remote_available": not any(a.get("title") == "Remote storage unavailable" or "Storage unavailable" in (a.get("title") or "") for a in active_alerts),
+            "targets": storage_targets,
+            "replication": replication,
+            "primary": next((s for s in storage_targets if s.get("role")=="PRIMARY"),None),
         },
     }
