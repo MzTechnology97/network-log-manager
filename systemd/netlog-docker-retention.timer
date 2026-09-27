@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Network Log Manager archive retention cleanup
+
+[Timer]
+OnCalendar=*-*-* 04:45:00
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target
