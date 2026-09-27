@@ -4371,3 +4371,19 @@ def admin_channel_test(channel_id: int, request: Request, csrf: str=Form(...)):
         return RedirectResponse("/admin/settings?message=Notification+test+failed",status_code=303)
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Notification+test+sent",status_code=303)
+
+
+@app.post("/admin/settings/channels/{channel_id}/events")
+def admin_channel_events(channel_id:int,request:Request,csrf:str=Form(...),event_types:list[str]=Form([])):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    import json
+    allowed={"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down"}
+    selected=[x for x in event_types if x in allowed]
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE notification_channels SET event_types_json=%s WHERE id=%s",(json.dumps(selected),channel_id)); conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+events+updated",status_code=303)
