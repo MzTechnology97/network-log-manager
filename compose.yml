@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    command: ["--event-scheduler=ON"]
     volumes:
       - db-data:/var/lib/mysql
     healthcheck:
@@ -38,6 +39,56 @@ services:
       - app-state:/var/lib/netlog-manager
     ports:
       - "127.0.0.1:8080:8080"
+
+  archive-cache:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","archive-cache"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &app-env
+      NETLOG_DB_HOST: db
+      NETLOG_DB_USER: netlog_app
+      NETLOG_DB_PASSWORD: ${NETLOG_APP_PASSWORD}
+      NETLOG_DB_NAME: netlog_manager
+      SYSLOG_DB_HOST: db
+      SYSLOG_DB_USER: netlog_reader
+      SYSLOG_DB_PASSWORD: ${NETLOG_READER_PASSWORD}
+      SYSLOG_DB_NAME: syslogdb
+      SECRET_KEY: ${SECRET_KEY}
+      ARCHIVE_ROOT: /archive/mikrotik
+      EXPORT_ROOT: /var/cache/netlog-manager/exports
+      LIVE_LOG: /var/log/network.log
+    volumes:
+      - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
+  export-worker:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","export-worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    volumes:
+      - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
+  export-cleanup:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","export-cleanup"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    volumes:
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
 
   syslog:
     build:
