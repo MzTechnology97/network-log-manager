@@ -49,14 +49,18 @@ def _record(key,severity,title,message,repeat_minutes):
             else:
                 cur.execute('INSERT INTO system_alerts(alert_key,severity,title,message) VALUES(%s,%s,%s,%s)',(key,severity,title,message)); alert_id=cur.lastrowid
             should_notify=(not row or not row.get('notification_sent_at') or (datetime.now()-row['notification_sent_at']).total_seconds()>=repeat_minutes*60)
-            cur.execute('SELECT * FROM notification_channels WHERE enabled=1'); channels=cur.fetchall() if should_notify else []; conn.commit()
+            cur.execute('SELECT * FROM notification_channels WHERE enabled=1')
+            all_channels=cur.fetchall()
+            channels=[]
+            if should_notify:
+                for channel in all_channels:
+                    selected=json.loads(channel.get('event_types_json') or '[]')
+                    if selected and key not in selected: continue
+                    channels.append(channel)
+            conn.commit()
         delivered=False
         for channel in channels:
             try:
-                selected=json.loads(channel.get('event_types_json') or '[]')
-                # An explicit subscription list is authoritative. Legacy channels
-                # with NULL/empty subscriptions keep receiving all events.
-                if selected and key not in selected: continue
                 send_channel(channel,title,message)
                 delivered=True
                 with conn.cursor() as cur:
