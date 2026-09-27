@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     environment:
       MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      TZ: ${TZ:-Europe/Rome}
     command: ["--event-scheduler=ON"]
     volumes:
       - db-data:/var/lib/mysql
@@ -20,6 +21,8 @@ services:
       db:
         condition: service_healthy
     environment:
+      TZ: ${TZ:-Europe/Rome}
+      NETLOG_TIMEZONE: ${TZ:-Europe/Rome}
       NETLOG_DB_HOST: db
       NETLOG_DB_USER: netlog_app
       NETLOG_DB_PASSWORD: ${NETLOG_APP_PASSWORD}
@@ -63,6 +66,8 @@ services:
       db:
         condition: service_healthy
     environment: &app-env
+      TZ: ${TZ:-Europe/Rome}
+      NETLOG_TIMEZONE: ${TZ:-Europe/Rome}
       NETLOG_DB_HOST: db
       NETLOG_DB_USER: netlog_app
       NETLOG_DB_PASSWORD: ${NETLOG_APP_PASSWORD}
@@ -137,6 +142,7 @@ services:
         condition: service_healthy
     environment:
       NETLOG_INGEST_PASSWORD: ${NETLOG_INGEST_PASSWORD}
+      TZ: ${TZ:-Europe/Rome}
     volumes:
       - live-log:/var/log
     ports:
