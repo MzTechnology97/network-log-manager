@@ -35,4 +35,28 @@ jobs:
           /tmp/netlog-ci/bin/pip install -q -r requirements.txt
       - name: Docker Compose validation
         if: hashFiles('compose.yml') != ''
+        env:
+          DB_ROOT_PASSWORD: ci-root-password
+          NETLOG_APP_PASSWORD: ci-app-password
+          NETLOG_READER_PASSWORD: ci-reader-password
+          NETLOG_INGEST_PASSWORD: ci-ingest-password
+          NETLOG_MAINT_PASSWORD: ci-maint-password
+          SECRET_KEY: ci-secret-key
+          ARCHIVE_ROOT: /tmp/netlog-archive
+          SYSLOG_PORT: "5514"
+          HOSTNAME_FQDN: netlog-manager.local
+          TLS_DIR: /tmp/netlog-tls
         run: docker compose -f compose.yml config >/dev/null
+      - name: Docker image build
+        env:
+          DB_ROOT_PASSWORD: ci-root-password
+          NETLOG_APP_PASSWORD: ci-app-password
+          NETLOG_READER_PASSWORD: ci-reader-password
+          NETLOG_INGEST_PASSWORD: ci-ingest-password
+          NETLOG_MAINT_PASSWORD: ci-maint-password
+          SECRET_KEY: ci-secret-key
+          ARCHIVE_ROOT: /tmp/netlog-archive
+          SYSLOG_PORT: "5514"
+          HOSTNAME_FQDN: netlog-manager.local
+          TLS_DIR: /tmp/netlog-tls
+        run: docker compose build app syslog proxy
