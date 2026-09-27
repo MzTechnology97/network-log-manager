@@ -89,7 +89,7 @@ def run_checks():
     s=settings(); active=[]; repeat=int(s.get('alert_repeat_minutes','60'))
     # Multi-storage health. A quick read/list check runs each monitor cycle.
     try:
-        health=health_check_all(deep=False)
+        health=health_check_all(deep=True)
         failed=[h for h in health if h["status"]!="HEALTHY"]
         if failed:
             active.append('storage_health')
