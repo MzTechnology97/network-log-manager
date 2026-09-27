@@ -94,7 +94,8 @@ def run_checks():
         if failed:
             active.append('storage_health')
             detail="; ".join(h["name"]+": "+(h.get("error") or h["status"]) for h in failed)
-            _record('storage_health','CRITICAL','Storage health check failed',detail,repeat)
+            severity='CRITICAL' if any(h["status"]=='OFFLINE' for h in failed) else 'WARNING'
+            _record('storage_health',severity,'Storage health check failed',detail,repeat)
     except Exception as exc:
         active.append('storage_health'); _record('storage_health','CRITICAL','Storage health check failed',str(exc),repeat)
     # Capacity remains a local filesystem check; remote capacity is reported
