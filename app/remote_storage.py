@@ -123,3 +123,24 @@ def upload_file(cfg, secret, local_path, relative_path):
         finally: t.close()
         return
     raise ValueError("Unsupported remote storage type")
+
+
+def download_file(cfg, secret, relative_path, local_path):
+    rel=_safe_folder(relative_path); dst=Path(local_path); dst.parent.mkdir(parents=True,exist_ok=True)
+    kind=cfg["type"].upper()
+    if kind=="LOCAL":
+        src=(Path(cfg["path"]).resolve()/rel).resolve()
+        if not src.is_file(): raise FileNotFoundError(str(src))
+        import shutil; shutil.copy2(src,dst); return
+    if kind=="SMB":
+        remote=posixpath.join(_safe_folder(cfg.get("folder","")),rel)
+        _smb_cmd(cfg,secret,f'get "{remote}" "{dst}"'); return
+    if kind=="SFTP":
+        t=paramiko.Transport((cfg["host"],int(cfg.get("port") or 22)))
+        try:
+            t.connect(username=secret["username"],password=secret["password"]); s=paramiko.SFTPClient.from_transport(t)
+            remote=posixpath.join(cfg.get("path") or "/",_safe_folder(cfg.get("folder","")),rel)
+            s.get(remote,str(dst))
+        finally: t.close()
+        return
+    raise ValueError("Unsupported remote storage type")
