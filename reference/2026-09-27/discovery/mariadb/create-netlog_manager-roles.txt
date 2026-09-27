@@ -1,1 +1,0 @@
-roles	CREATE TABLE `roles` (\n  `id` smallint(5) unsigned NOT NULL AUTO_INCREMENT,\n  `name` varchar(32) NOT NULL,\n  `description` varchar(255) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `uq_roles_name` (`name`)\n) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci

@@ -1,0 +1,123 @@
+services:
+  db:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    command: ["--event-scheduler=ON"]
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD","healthcheck.sh","--connect","--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NETLOG_DB_HOST: db
+      NETLOG_DB_USER: netlog_app
+      NETLOG_DB_PASSWORD: ${NETLOG_APP_PASSWORD}
+      NETLOG_DB_NAME: netlog_manager
+      SYSLOG_DB_HOST: db
+      SYSLOG_DB_USER: netlog_reader
+      SYSLOG_DB_PASSWORD: ${NETLOG_READER_PASSWORD}
+      SYSLOG_DB_NAME: syslogdb
+      SECRET_KEY: ${SECRET_KEY}
+      ARCHIVE_ROOT: /archive/mikrotik
+      EXPORT_ROOT: /var/cache/netlog-manager/exports
+      LIVE_LOG: /var/log/network.log
+    volumes:
+      - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
+      - live-log:/var/log:ro
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
+  proxy:
+    build:
+      context: docker/proxy
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - ${TLS_DIR:-/var/lib/netlog-manager/docker/tls}:/etc/nginx/tls:ro
+    ports:
+      - "80:80"
+      - "443:443"
+
+  archive-cache:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","archive-cache"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: &app-env
+      NETLOG_DB_HOST: db
+      NETLOG_DB_USER: netlog_app
+      NETLOG_DB_PASSWORD: ${NETLOG_APP_PASSWORD}
+      NETLOG_DB_NAME: netlog_manager
+      SYSLOG_DB_HOST: db
+      SYSLOG_DB_USER: netlog_reader
+      SYSLOG_DB_PASSWORD: ${NETLOG_READER_PASSWORD}
+      SYSLOG_DB_NAME: syslogdb
+      SECRET_KEY: ${SECRET_KEY}
+      ARCHIVE_ROOT: /archive/mikrotik
+      EXPORT_ROOT: /var/cache/netlog-manager/exports
+      LIVE_LOG: /var/log/network.log
+    volumes:
+      - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
+  export-worker:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","export-worker"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    volumes:
+      - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
+  export-cleanup:
+    build: .
+    restart: unless-stopped
+    command: ["/usr/local/bin/netlog-worker","export-cleanup"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *app-env
+    volumes:
+      - app-cache:/var/cache/netlog-manager
+      - app-state:/var/lib/netlog-manager
+
+  syslog:
+    build:
+      context: docker/syslog-ng
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NETLOG_INGEST_PASSWORD: ${NETLOG_INGEST_PASSWORD}
+    volumes:
+      - live-log:/var/log
+    ports:
+      - "${SYSLOG_PORT:-5514}:5514/udp"
+      - "${SYSLOG_PORT:-5514}:5514/tcp"
+
+volumes:
+  db-data:
+  live-log:
+  app-cache:
+  app-state:

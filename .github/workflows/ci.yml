@@ -1,0 +1,104 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Shell syntax
+        run: find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+      - name: Python syntax
+        run: python3 -m compileall -q app create-admin.py
+      - name: Migration naming
+        run: |
+          bad="$(find database/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | grep -Ev '^[0-9]{4}_[a-z0-9_-]+\.sql$' || true)"
+          test -z "$bad" || { echo "$bad"; exit 1; }
+      - name: Migration files present
+        run: |
+          test -s database/migrations/0001_reference_schema.sql
+          test -s database/migrations/0002_daily_log_tables.sql
+      - name: No committed private keys
+        run: "! grep -RInE --exclude-dir=.git --exclude-dir=reference 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' ."
+      - name: No obvious hard-coded secrets
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, sys
+          names = re.compile(r'^(DB_ROOT_PASSWORD|SECRET_KEY|NETLOG_[A-Z_]*PASSWORD)=(.*)$')
+          bad = []
+          for rootname in ("config", "scripts", "systemd", "docker"):
+              root = Path(rootname)
+              if not root.exists():
+                  continue
+              for path in root.rglob("*"):
+                  if not path.is_file() or path.name.endswith(".example"):
+                      continue
+                  for no, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
+                      match = names.match(line.strip())
+                      if not match:
+                          continue
+                      value = match.group(2).strip()
+                      if not value or "$" in value or "random_secret" in value or value in ("''", '""'):
+                          continue
+                      bad.append(f"{path}:{no}:{match.group(1)}")
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          PY
+      - name: Requirements install
+        run: |
+          python3 -m venv /tmp/netlog-ci
+          /tmp/netlog-ci/bin/pip install -q -r requirements.txt
+      - name: Docker Compose validation
+        env: &docker-env
+          DB_ROOT_PASSWORD: ci-root-password
+          NETLOG_APP_PASSWORD: ci-app-password
+          NETLOG_READER_PASSWORD: ci-reader-password
+          NETLOG_INGEST_PASSWORD: ci-ingest-password
+          NETLOG_MAINT_PASSWORD: ci-maint-password
+          SECRET_KEY: ci-secret-key
+          ARCHIVE_ROOT: /tmp/netlog-archive
+          SYSLOG_PORT: "5514"
+          HOSTNAME_FQDN: netlog-manager.local
+          TLS_DIR: /tmp/netlog-tls
+        run: docker compose -f compose.yml config >/dev/null
+      - name: Docker image build
+        env: *docker-env
+        run: docker compose build app syslog proxy
+      - name: Docker syslog configuration syntax
+        env: *docker-env
+        run: docker compose run --rm --no-deps syslog --check
+      - name: Docker stack integration
+        env: *docker-env
+        run: |
+          mkdir -p /tmp/netlog-archive /tmp/netlog-tls
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 -keyout /tmp/netlog-tls/netlog-manager.key -out /tmp/netlog-tls/netlog-manager.crt -subj "/CN=netlog-manager.local" >/dev/null 2>&1
+          docker compose up -d db
+          for i in $(seq 1 60); do
+            state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$(docker compose ps -q db)" 2>/dev/null || echo starting)"
+            [[ "$state" == healthy ]] && break
+            [[ "$state" == unhealthy ]] && { docker compose logs db; exit 1; }
+            sleep 2
+          done
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q db)")" == healthy ]]
+          docker compose exec -T db mariadb -uroot -pci-root-password -e "CREATE DATABASE IF NOT EXISTS netlog_manager; CREATE DATABASE IF NOT EXISTS syslogdb; CREATE USER IF NOT EXISTS 'netlog_app'@'%' IDENTIFIED BY 'ci-app-password'; CREATE USER IF NOT EXISTS 'netlog_reader'@'%' IDENTIFIED BY 'ci-reader-password'; CREATE USER IF NOT EXISTS 'netlog_ingest'@'%' IDENTIFIED BY 'ci-ingest-password'; CREATE USER IF NOT EXISTS 'netlog_maintenance'@'%' IDENTIFIED BY 'ci-maint-password'; GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%'; GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%'; GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%'; GRANT CREATE ON syslogdb.* TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES;"
+          for f in database/migrations/*.sql; do docker compose exec -T db mariadb -uroot -pci-root-password < "$f"; done
+          docker compose exec -T db mariadb -uroot -pci-root-password -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; CALL syslogdb.CreateFutureTables();"
+          docker compose up -d app syslog proxy
+          for i in $(seq 1 30); do curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null && break; sleep 2; done
+          curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 https://netlog-manager.local/ >/dev/null
+          docker compose ps
+      - name: Docker logs on failure
+        if: failure()
+        env: *docker-env
+        run: docker compose logs --no-color --tail=200
+      - name: Docker cleanup
+        if: always()
+        env: *docker-env
+        run: docker compose down -v --remove-orphans

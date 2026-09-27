@@ -1,0 +1,24 @@
+[Unit]
+Description=Network Log Manager
+After=network.target mariadb.service syslog-ng.service
+Wants=mariadb.service
+
+[Service]
+Environment=PYTHONDONTWRITEBYTECODE=1
+Type=simple
+User=netlog
+Group=netlog
+WorkingDirectory=/opt/netlog-manager
+ExecStart=/opt/netlog-manager/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/netlog-manager
+ReadWritePaths=/var/log/netlog-manager
+ReadWritePaths=/var/cache/netlog-manager
+
+[Install]
+WantedBy=multi-user.target

@@ -1,6 +1,0 @@
-119M	/opt/netlog-manager
-8,0K	/var/lib/netlog-manager
-4,0K	/var/log/netlog-manager
-23G	/var/cache/netlog-manager
-21G	/archive/mikrotik
-60M	/var/log/network.log

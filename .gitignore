@@ -1,0 +1,14 @@
+.env
+*.env
+!.env.example
+*.key
+*.pem
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data/
+backups/
+exports/
+*.sql.zst
+*.part

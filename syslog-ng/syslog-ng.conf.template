@@ -1,0 +1,25 @@
+@version: 3.38
+@include "scl.conf"
+
+source s_network {
+  syslog(ip(0.0.0.0) port(@@SYSLOG_PORT@@) transport("udp"));
+  syslog(ip(0.0.0.0) port(@@SYSLOG_PORT@@) transport("tcp"));
+};
+parser p_network_parser {
+ regexp-parser(patterns("proto (?<NET_PROTO>[A-Z]+)(?: \\([^)]*\\))?, (?<NET_SRCIP>[0-9\\.]+):(?<NET_SRCPORT>[0-9]+)->(?<NET_DSTIP>[0-9\\.]+):(?<NET_DSTPORT>[0-9]+)"));
+ regexp-parser(patterns("connection-state:[^ ]*,snat .*NAT \\([0-9\\.]+:[0-9]+->(?<NET_NATIP>[0-9\\.]+):(?<NET_NATPORT>[0-9]+)\\)->"));
+};
+filter f_valid_logs { match("proto " value("MESSAGE")); };
+destination d_network_logs {
+ file("/var/log/network.log" owner("root") group("netlog") perm(0640)
+ template("${ISODATE} PROTO: ${NET_PROTO}, SRC: ${NET_SRCIP}:${NET_SRCPORT}, NAT: ${NET_NATIP}:${NET_NATPORT}, DST: ${NET_DSTIP}:${NET_DSTPORT}\n")
+ template-escape(no));
+};
+destination d_mysql {
+ sql(type(mysql) host("@@DB_HOST@@") username("netlog_ingest") password("@@NETLOG_INGEST_PASSWORD@@")
+ database("syslogdb") table("mikrotik_logs_${YEAR}_${MONTH}_${DAY}")
+ columns("timestamp","source_ip","source_port","dest_ip","dest_port","protocol","nat_source_ip","nat_source_port")
+ values("${S_YEAR}-${S_MONTH}-${S_DAY} ${S_HOUR}:${S_MIN}:${S_SEC}","${NET_SRCIP}","${NET_SRCPORT}","${NET_DSTIP}","${NET_DSTPORT}","${NET_PROTO}","${NET_NATIP}","${NET_NATPORT}")
+ session-statements("SET SESSION sql_mode=''") log-fifo-size(10000) batch-lines(1) frac-digits(3));
+};
+log { source(s_network); parser(p_network_parser); filter(f_valid_logs); destination(d_network_logs); destination(d_mysql); };

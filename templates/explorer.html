@@ -1,0 +1,1218 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1">
+
+<title>Log Explorer - Network Log Manager</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: #080d18;
+    color: #e5e7eb;
+    font-family:
+        Inter, system-ui, -apple-system,
+        BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+header {
+    min-height: 68px;
+    padding: 0 28px;
+    background: #0f172a;
+    border-bottom: 1px solid #253047;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.user {
+    color: #94a3b8;
+}
+
+nav {
+    display: flex;
+    gap: 8px;
+}
+
+nav a {
+    color: #94a3b8;
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: 7px;
+}
+
+nav a:hover,
+nav a.active {
+    color: #fff;
+    background: #1e293b;
+}
+
+.logout {
+    border: 1px solid #334155;
+    background: transparent;
+    color: #cbd5e1;
+    padding: 7px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+}
+
+main {
+    max-width: 1500px;
+    margin: auto;
+    padding: 28px;
+}
+
+.card {
+    background: #0f172a;
+    border: 1px solid #243044;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 18px;
+}
+
+h1 {
+    margin: 0 0 6px;
+    font-size: 24px;
+}
+
+h2 {
+    margin: 0 0 6px;
+    font-size: 18px;
+}
+
+.description {
+    color: #94a3b8;
+    margin: 0 0 24px;
+}
+
+.tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #253047;
+}
+
+.tab-button {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: #94a3b8;
+    padding: 11px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.tab-button:hover {
+    color: #e5e7eb;
+}
+
+.tab-button.active {
+    color: #60a5fa;
+    border-bottom-color: #3b82f6;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(5, minmax(0, 1fr));
+    gap: 14px;
+    align-items: end;
+}
+
+.advanced-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.form-section {
+    margin-top: 22px;
+    padding-top: 20px;
+    border-top: 1px solid #1e293b;
+}
+
+.form-section:first-of-type {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.section-title {
+    margin: 0 0 13px;
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.field label {
+    display: block;
+    color: #94a3b8;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 7px;
+}
+
+input,
+select {
+    width: 100%;
+    height: 42px;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    background: #0b1220;
+    color: #e5e7eb;
+    padding: 0 11px;
+    font-size: 14px;
+}
+
+input:focus,
+select:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+
+.search-actions {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.search-button {
+    height: 42px;
+    border: 0;
+    border-radius: 7px;
+    background: #2563eb;
+    color: white;
+    padding: 0 22px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.search-button:hover {
+    background: #1d4ed8;
+}
+
+.search-note {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.error {
+    background: #451a1a;
+    border: 1px solid #7f1d1d;
+    color: #fecaca;
+    padding: 14px;
+    border-radius: 8px;
+    margin-top: 18px;
+}
+
+.summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    color: #94a3b8;
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.summary strong {
+    color: #e5e7eb;
+}
+
+.filter-summary {
+    margin-bottom: 18px;
+    padding: 12px 14px;
+    border: 1px solid #253047;
+    border-radius: 8px;
+    background: #0b1220;
+}
+
+.filter-summary-title {
+    color: #94a3b8;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 9px;
+}
+
+.filter-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.filter-tag {
+    display: inline-block;
+    background: #1e293b;
+    color: #cbd5e1;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.warning {
+    background: #422006;
+    border: 1px solid #854d0e;
+    color: #fde68a;
+    padding: 12px;
+    border-radius: 7px;
+    margin-bottom: 15px;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 1200px;
+}
+
+th {
+    text-align: left;
+    color: #94a3b8;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    padding: 11px 10px;
+    border-bottom: 1px solid #334155;
+}
+
+td {
+    padding: 12px 10px;
+    border-bottom: 1px solid #1e293b;
+    font-family:
+        ui-monospace, SFMono-Regular,
+        Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+}
+
+tr:hover td {
+    background: #111c30;
+}
+
+.client {
+    color: #60a5fa;
+}
+
+.nat {
+    color: #4ade80;
+}
+
+.destination {
+    color: #e5e7eb;
+}
+
+.protocol {
+    display: inline-block;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: #1e293b;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.empty {
+    padding: 35px;
+    text-align: center;
+    color: #64748b;
+}
+
+.meta {
+    color: #64748b;
+    font-size: 11px;
+}
+
+@media (max-width: 1100px) {
+    .form-grid,
+    .advanced-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .header-right {
+        gap: 8px;
+    }
+}
+
+@media (max-width: 650px) {
+    header {
+        padding: 12px 16px;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    main {
+        padding: 16px;
+    }
+
+    .form-grid,
+    .advanced-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tabs {
+        overflow-x: auto;
+    }
+
+    .tab-button {
+        white-space: nowrap;
+    }
+
+    .search-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+</style>
+    <link rel="stylesheet" href="/static/css/navbar.css">
+</head>
+
+<body>
+
+{% set active_page = "explorer" %}
+{% include "partials/navbar.html" %}
+
+
+<main>
+
+<section class="card">
+
+<h1>Log Explorer</h1>
+
+<p class="description">
+    Ricerca e correlazione degli eventi di rete
+    nel database online e negli archivi storici.
+</p>
+
+
+<div class="tabs">
+
+<button type="button"
+        id="tab-nat"
+        class="tab-button
+        {% if active_mode != 'advanced' %}active{% endif %}"
+        onclick="showMode('nat')">
+    Correlazione NAT
+</button>
+
+<button type="button"
+        id="tab-advanced"
+        class="tab-button
+        {% if active_mode == 'advanced' %}active{% endif %}"
+        onclick="showMode('advanced')">
+    Ricerca avanzata
+</button>
+
+</div>
+
+
+<div id="panel-nat"
+     class="tab-panel
+     {% if active_mode != 'advanced' %}active{% endif %}">
+
+<h2>Correlazione NAT</h2>
+
+<p class="description">
+    Identifica il cliente associato a un
+    indirizzo IP pubblico e a una porta NAT
+    in uno specifico intervallo temporale.
+</p>
+
+
+<form method="post"
+      action="/explorer">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<div class="form-grid">
+
+<div class="field">
+    <label>IP pubblico</label>
+
+    <input type="text"
+           name="public_ip"
+           value="{{ form.public_ip }}"
+           placeholder="185.198.209.16"
+           required>
+</div>
+
+
+<div class="field">
+    <label>Porta pubblica</label>
+
+    <input type="number"
+           name="public_port"
+           min="1"
+           max="65535"
+           value="{{ form.public_port }}"
+           placeholder="49085"
+           required>
+</div>
+
+
+<div class="field">
+    <label>Da</label>
+
+    <input type="datetime-local"
+           name="start"
+           value="{{ form.start }}"
+           required>
+</div>
+
+
+<div class="field">
+    <label>A</label>
+
+    <input type="datetime-local"
+           name="end"
+           value="{{ form.end }}"
+           required>
+</div>
+
+
+<div class="field">
+    <label>Protocollo</label>
+
+    <select name="protocol">
+
+        <option value=""
+            {% if not form.protocol %}selected{% endif %}>
+            Tutti
+        </option>
+
+        <option value="TCP"
+            {% if form.protocol == "TCP" %}selected{% endif %}>
+            TCP
+        </option>
+
+        <option value="UDP"
+            {% if form.protocol == "UDP" %}selected{% endif %}>
+            UDP
+        </option>
+
+    </select>
+</div>
+
+</div>
+
+
+<div class="search-actions">
+
+<button type="submit"
+        class="search-button">
+    Cerca
+</button>
+
+<span class="search-note">
+    IP pubblico e porta pubblica sono obbligatori.
+</span>
+
+</div>
+
+</form>
+
+
+{% if error %}
+
+<div class="error">
+    {{ error }}
+</div>
+
+{% endif %}
+
+</div>
+
+
+<div id="panel-advanced"
+     class="tab-panel
+     {% if active_mode == 'advanced' %}active{% endif %}">
+
+<h2>Ricerca avanzata</h2>
+
+<p class="description">
+    Combina liberamente i parametri disponibili.
+    Il periodo è obbligatorio e deve essere
+    specificato almeno un filtro di traffico.
+</p>
+
+
+<form method="post"
+      action="/explorer/advanced">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+
+<div class="form-section">
+
+<div class="section-title">
+    Periodo
+</div>
+
+<div class="advanced-grid">
+
+<div class="field">
+    <label>Da</label>
+
+    <input type="datetime-local"
+           name="start"
+           value="{{ advanced_form.start }}"
+           required>
+</div>
+
+<div class="field">
+    <label>A</label>
+
+    <input type="datetime-local"
+           name="end"
+           value="{{ advanced_form.end }}"
+           required>
+</div>
+
+<div class="field">
+    <label>Protocollo</label>
+
+    <select name="protocol">
+
+        <option value=""
+            {% if not advanced_form.protocol %}selected{% endif %}>
+            Tutti
+        </option>
+
+        <option value="TCP"
+            {% if advanced_form.protocol == "TCP" %}selected{% endif %}>
+            TCP
+        </option>
+
+        <option value="UDP"
+            {% if advanced_form.protocol == "UDP" %}selected{% endif %}>
+            UDP
+        </option>
+
+    </select>
+</div>
+
+</div>
+
+</div>
+
+
+<div class="form-section">
+
+<div class="section-title">
+    Cliente / sorgente
+</div>
+
+<div class="advanced-grid">
+
+<div class="field">
+    <label>IP cliente</label>
+
+    <input type="text"
+           name="source_ip"
+           value="{{ advanced_form.source_ip }}"
+           placeholder="10.31.100.125">
+</div>
+
+<div class="field">
+    <label>Porta cliente</label>
+
+    <input type="number"
+           name="source_port"
+           min="1"
+           max="65535"
+           value="{{ advanced_form.source_port }}"
+           placeholder="52932">
+</div>
+
+</div>
+
+</div>
+
+
+<div class="form-section">
+
+<div class="section-title">
+    NAT
+</div>
+
+<div class="advanced-grid">
+
+<div class="field">
+    <label>IP pubblico NAT</label>
+
+    <input type="text"
+           name="nat_source_ip"
+           value="{{ advanced_form.nat_source_ip }}"
+           placeholder="185.198.209.16">
+</div>
+
+<div class="field">
+    <label>Porta pubblica NAT</label>
+
+    <input type="number"
+           name="nat_source_port"
+           min="1"
+           max="65535"
+           value="{{ advanced_form.nat_source_port }}"
+           placeholder="49085">
+</div>
+
+</div>
+
+</div>
+
+
+<div class="form-section">
+
+<div class="section-title">
+    Destinazione
+</div>
+
+<div class="advanced-grid">
+
+<div class="field">
+    <label>IP destinazione</label>
+
+    <input type="text"
+           name="dest_ip"
+           value="{{ advanced_form.dest_ip }}"
+           placeholder="157.240.203.63">
+</div>
+
+<div class="field">
+    <label>Porta destinazione</label>
+
+    <input type="number"
+           name="dest_port"
+           min="1"
+           max="65535"
+           value="{{ advanced_form.dest_port }}"
+           placeholder="443">
+</div>
+
+</div>
+
+</div>
+
+
+<div class="search-actions">
+
+<button type="submit"
+        class="search-button">
+    Cerca
+</button>
+
+{% if can_export %}
+<button type="submit"
+        class="search-button"
+        formaction="/explorer/advanced/export"
+        formmethod="post">
+    Esporta CSV
+</button>
+{% endif %}
+
+<span class="search-note">
+    È sufficiente compilare uno qualsiasi
+    dei filtri oltre al periodo.
+</span>
+
+</div>
+
+</form>
+
+
+{% if advanced_error %}
+
+<div class="error">
+    {{ advanced_error }}
+</div>
+
+{% endif %}
+
+</div>
+
+</section>
+
+
+{% if results %}
+
+<section class="card">
+
+<div class="summary">
+
+<span>
+    Risultati:
+    <strong>{{ results.count }}</strong>
+</span>
+
+<span>
+    IP pubblico:
+    <strong>{{ results.public_ip }}</strong>
+</span>
+
+<span>
+    Porta pubblica:
+    <strong>{{ results.public_port }}</strong>
+</span>
+
+<span>
+    Protocollo:
+    <strong>{{ results.protocol or "Tutti" }}</strong>
+</span>
+
+<span>
+    Tabelle:
+    <strong>{{ results.searched_tables|length }}</strong>
+</span>
+
+</div>
+
+
+{% if results.truncated %}
+
+<div class="warning">
+    Sono visualizzati i primi 1.000 risultati.
+    Restringere l'intervallo temporale per
+    ottenere una ricerca più precisa.
+</div>
+
+{% endif %}
+
+
+{% if results.skipped_tables %}
+
+<div class="warning">
+    Alcune giornate non sono disponibili nel
+    database online:
+    {{ results.skipped_tables|join(", ") }}
+</div>
+
+{% endif %}
+
+
+{% if results.results %}
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+<tr>
+    <th>Timestamp</th>
+    <th>Protocollo</th>
+    <th>IP cliente</th>
+    <th>Porta cliente</th>
+    <th>IP pubblico</th>
+    <th>Porta pubblica</th>
+    <th>IP destinazione</th>
+    <th>Porta destinazione</th>
+    <th>Tabella</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for row in results.results %}
+
+<tr>
+
+<td>
+    {% if row.timestamp is string %}
+        {{ row.timestamp[:23].replace("T", " ") }}
+    {% else %}
+        {{ row.timestamp.strftime(
+            "%d/%m/%Y %H:%M:%S.%f"
+        )[:-3] }}
+    {% endif %}
+</td>
+
+<td>
+    <span class="protocol">
+        {{ row.protocol }}
+    </span>
+</td>
+
+<td class="client">
+    {{ row.source_ip }}
+</td>
+
+<td class="client">
+    {{ row.source_port }}
+</td>
+
+<td class="nat">
+    {{ row.nat_source_ip }}
+</td>
+
+<td class="nat">
+    {{ row.nat_source_port }}
+</td>
+
+<td class="destination">
+    {{ row.dest_ip }}
+</td>
+
+<td class="destination">
+    {{ row.dest_port }}
+</td>
+
+<td class="meta">
+    {{ row._table }}
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+</table>
+
+</div>
+
+{% else %}
+
+<div class="empty">
+    Nessun evento trovato per i parametri indicati.
+</div>
+
+{% endif %}
+
+</section>
+
+{% endif %}
+
+
+{% if advanced_results %}
+
+<section class="card">
+
+<div class="summary">
+
+<span>
+    Risultati:
+    <strong>{{ advanced_results.count }}</strong>
+</span>
+
+<span>
+    Database online:
+    <strong>
+        {{ advanced_results.searched_online_tables|length }}
+    </strong>
+</span>
+
+<span>
+    Archivi storici:
+    <strong>
+        {{ advanced_results.searched_archives|length }}
+    </strong>
+</span>
+
+<span>
+    Sorgenti interrogate:
+    <strong>
+        {{ advanced_results.searched_tables|length }}
+    </strong>
+</span>
+
+</div>
+
+
+{% if advanced_results.filters %}
+
+<div class="filter-summary">
+
+<div class="filter-summary-title">
+    Filtri applicati
+</div>
+
+<div class="filter-tags">
+
+{% for key, value in advanced_results.filters.items() %}
+
+<span class="filter-tag">
+    {% if key == "source_ip" %}
+        IP cliente
+    {% elif key == "source_port" %}
+        Porta cliente
+    {% elif key == "nat_source_ip" %}
+        IP pubblico NAT
+    {% elif key == "nat_source_port" %}
+        Porta pubblica NAT
+    {% elif key == "dest_ip" %}
+        IP destinazione
+    {% elif key == "dest_port" %}
+        Porta destinazione
+    {% elif key == "protocol" %}
+        Protocollo
+    {% else %}
+        {{ key }}
+    {% endif %}
+    :
+    <strong>{{ value }}</strong>
+</span>
+
+{% endfor %}
+
+</div>
+
+</div>
+
+{% endif %}
+
+
+{% if advanced_results.truncated %}
+
+<div class="warning">
+    Sono visualizzati i primi 1.000 risultati.
+    Restringere il periodo o aggiungere ulteriori
+    filtri per una ricerca più precisa.
+</div>
+
+{% endif %}
+
+
+{% if advanced_results.pending_archives %}
+
+<div class="warning">
+    <strong>Risultati potenzialmente parziali.</strong>
+    La cache di ricerca non è ancora disponibile
+    per alcune giornate dell'archivio storico.
+
+    {% for item in advanced_results.pending_archives %}
+        <div style="margin-top:6px">
+            {{ item.date }}
+            {% if item.reason %}
+                — {{ item.reason }}
+            {% endif %}
+        </div>
+    {% endfor %}
+</div>
+
+{% endif %}
+
+
+{% if advanced_results.missing_days %}
+
+<div class="warning">
+    <strong>Giornate senza dati disponibili.</strong>
+
+    <div style="margin-top:6px">
+        {{ advanced_results.missing_days|join(", ") }}
+    </div>
+</div>
+
+{% endif %}
+
+
+{% if advanced_results.unsupported_tables %}
+
+<div class="warning">
+    <strong>Risultati potenzialmente parziali.</strong>
+    Alcune giornate non possono essere interrogate
+    con tutti i filtri richiesti.
+
+    {% for item in advanced_results.unsupported_tables %}
+
+        <div style="margin-top:8px">
+
+            {% if item.storage == "archive" %}
+                Archivio storico
+            {% else %}
+                Database online
+            {% endif %}
+
+            {{ item.table }} —
+
+            {% if "nat_source_ip" in item.missing
+                  or "nat_source_port" in item.missing %}
+
+                i log di questo periodo non contengono
+                le informazioni di traduzione NAT richieste.
+
+            {% else %}
+
+                campi non disponibili:
+                {{ item.missing|join(", ") }}.
+
+            {% endif %}
+
+        </div>
+
+    {% endfor %}
+</div>
+
+{% endif %}
+
+
+{% if advanced_results.results %}
+
+<div class="table-wrap">
+
+<table>
+
+<thead>
+<tr>
+    <th>Timestamp</th>
+    <th>Protocollo</th>
+    <th>IP cliente</th>
+    <th>Porta cliente</th>
+    <th>IP pubblico</th>
+    <th>Porta pubblica</th>
+    <th>IP destinazione</th>
+    <th>Porta destinazione</th>
+    <th>Origine</th>
+    <th>Tabella</th>
+</tr>
+</thead>
+
+<tbody>
+
+{% for row in advanced_results.results %}
+
+<tr>
+
+<td>
+    {% if row.timestamp is string %}
+        {{ row.timestamp[:23].replace("T", " ") }}
+    {% else %}
+        {{ row.timestamp.strftime(
+            "%d/%m/%Y %H:%M:%S.%f"
+        )[:-3] }}
+    {% endif %}
+</td>
+
+<td>
+    <span class="protocol">
+        {{ row.protocol }}
+    </span>
+</td>
+
+<td class="client">
+    {{ row.source_ip }}
+</td>
+
+<td class="client">
+    {{ row.source_port }}
+</td>
+
+<td class="nat">
+    {{ row.nat_source_ip if row.nat_source_ip is not none else "-" }}
+</td>
+
+<td class="nat">
+    {{ row.nat_source_port if row.nat_source_port is not none else "-" }}
+</td>
+
+<td class="destination">
+    {{ row.dest_ip }}
+</td>
+
+<td class="destination">
+    {{ row.dest_port }}
+</td>
+
+<td>
+    {% if row._storage == "archive" %}
+        <span class="filter-tag">Archivio</span>
+    {% else %}
+        <span class="filter-tag">Database</span>
+    {% endif %}
+</td>
+
+<td class="meta">
+    {{ row._table }}
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+</table>
+
+</div>
+
+{% else %}
+
+<div class="empty">
+    Nessun evento trovato per i filtri indicati.
+</div>
+
+{% endif %}
+
+</section>
+
+{% endif %}
+
+</main>
+
+
+<script>
+function showMode(mode) {
+    const natTab =
+        document.getElementById("tab-nat");
+
+    const advancedTab =
+        document.getElementById("tab-advanced");
+
+    const natPanel =
+        document.getElementById("panel-nat");
+
+    const advancedPanel =
+        document.getElementById("panel-advanced");
+
+    if (mode === "advanced") {
+        natTab.classList.remove("active");
+        natPanel.classList.remove("active");
+
+        advancedTab.classList.add("active");
+        advancedPanel.classList.add("active");
+    } else {
+        advancedTab.classList.remove("active");
+        advancedPanel.classList.remove("active");
+
+        natTab.classList.add("active");
+        natPanel.classList.add("active");
+    }
+}
+</script>
+
+</body>
+</html>

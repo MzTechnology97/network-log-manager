@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+
+    <title>Export log - Network Log Manager</title>
+
+    {% if job.status in ("PENDING", "RUNNING") %}
+    <meta http-equiv="refresh" content="3">
+    {% endif %}
+
+    <style>
+        body {
+            margin: 0;
+            padding: 40px 20px;
+            background: #111827;
+            color: #e5e7eb;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 7px 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            background: #374151;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns:
+                minmax(160px, 220px) 1fr;
+            gap: 10px 20px;
+            margin-top: 24px;
+        }
+
+        .label {
+            color: #9ca3af;
+        }
+
+        .progress {
+            margin-top: 24px;
+            padding: 16px;
+            background: #111827;
+            border-radius: 8px;
+        }
+
+        .error {
+            margin-top: 20px;
+            padding: 16px;
+            border: 1px solid #7f1d1d;
+            border-radius: 8px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 16px;
+            border-radius: 8px;
+            background: #374151;
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .button-primary {
+            background: #2563eb;
+        }
+
+        code {
+            word-break: break-all;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <div class="card">
+
+        <h1>Export log #{{ job.id }}</h1>
+
+        <div class="status">
+            {{ job.status }}
+        </div>
+
+        <div class="grid">
+
+            <div class="label">Richiesto da</div>
+            <div>{{ job.username }}</div>
+
+            <div class="label">Richiesto il</div>
+            <div>{{ job.requested_at }}</div>
+
+            <div class="label">Periodo</div>
+            <div>
+                {{ job.start_time }}
+                →
+                {{ job.end_time }}
+            </div>
+
+            <div class="label">IP cliente</div>
+            <div>{{ job.source_ip or "-" }}</div>
+
+            <div class="label">Porta cliente</div>
+            <div>{{ job.source_port or "-" }}</div>
+
+            <div class="label">IP pubblico NAT</div>
+            <div>{{ job.nat_source_ip or "-" }}</div>
+
+            <div class="label">Porta pubblica NAT</div>
+            <div>{{ job.nat_source_port or "-" }}</div>
+
+            <div class="label">IP destinazione</div>
+            <div>{{ job.dest_ip or "-" }}</div>
+
+            <div class="label">Porta destinazione</div>
+            <div>{{ job.dest_port or "-" }}</div>
+
+            <div class="label">Protocollo</div>
+            <div>{{ job.protocol or "-" }}</div>
+
+        </div>
+
+        {% if job.status == "PENDING" %}
+
+        <div class="progress">
+            Export in coda. In attesa del worker...
+        </div>
+
+        {% elif job.status == "RUNNING" %}
+
+        <div class="progress">
+            <strong>Elaborazione in corso</strong><br><br>
+
+            Righe elaborate:
+            {{ "{:,}".format(job.progress_rows or 0) }}
+
+            {% if job.progress_day %}
+            <br>
+            Giorno in elaborazione:
+            {{ job.progress_day }}
+            {% endif %}
+
+            <br>
+            Giorni database:
+            {{ job.online_days or 0 }}
+
+            <br>
+            Giorni archivio:
+            {{ job.archive_days or 0 }}
+        </div>
+
+        {% elif job.status == "COMPLETED" %}
+
+        <div class="progress">
+            <strong>Export completato.</strong><br><br>
+
+            Righe:
+            {{ "{:,}".format(job.result_rows or 0) }}
+
+            <br>
+            Dimensione:
+            {{ job.file_size or 0 }} byte
+
+            {% if job.file_sha256 %}
+            <br>
+            SHA-256:
+            <code>{{ job.file_sha256 }}</code>
+            {% endif %}
+        </div>
+
+        {% if job.file_state == "available" %}
+
+        <div class="progress">
+            <strong>File disponibile.</strong>
+        </div>
+
+        {% elif job.file_state == "expired" %}
+
+        <div class="progress">
+            <strong>File scaduto.</strong><br>
+            Il periodo di conservazione del file CSV
+            è terminato.
+        </div>
+
+        {% elif job.file_state == "missing" %}
+
+        <div class="error">
+            <strong>File mancante.</strong><br>
+            Il job risulta completato, ma il relativo
+            file CSV non è presente.
+        </div>
+
+        {% elif job.file_state == "integrity_failed" %}
+
+        <div class="error">
+            <strong>Integrità file fallita.</strong><br>
+            La dimensione del file non corrisponde
+            a quella registrata al completamento
+            dell'export.
+        </div>
+
+        {% else %}
+
+        <div class="error">
+            <strong>File non disponibile.</strong>
+        </div>
+
+        {% endif %}
+
+        <div class="actions">
+
+            {% if (
+                can_export
+                and job.file_state == "available"
+            ) %}
+            <a class="button button-primary"
+               href="/exports/{{ job.id }}/download">
+                Scarica CSV
+            </a>
+            {% endif %}
+
+            <a class="button"
+               href="/exports">
+                I miei export
+            </a>
+
+            <a class="button"
+               href="/explorer">
+                Log Explorer
+            </a>
+        </div>
+
+        {% elif job.status == "FAILED" %}
+
+        <div class="error">
+            <strong>Export non riuscito.</strong>
+
+            {% if job.error_message %}
+            <br><br>
+            {{ job.error_message }}
+            {% endif %}
+        </div>
+
+        {% endif %}
+
+        {% if job.status in ("PENDING", "RUNNING") %}
+        <div class="actions">
+            <a class="button"
+               href="/exports">
+                I miei export
+            </a>
+
+            <a class="button"
+               href="/explorer">
+                Log Explorer
+            </a>
+        </div>
+        {% endif %}
+
+    </div>
+
+</div>
+</body>
+</html>

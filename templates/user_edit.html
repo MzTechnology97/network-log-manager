@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestione utente - Network Log Manager</title>
+
+<style>
+body {
+    margin: 0;
+    background: #080f1c;
+    color: #e5e7eb;
+    font-family: Arial, sans-serif;
+}
+nav {
+    background: #0f1a2d;
+    border-bottom: 1px solid #263449;
+    padding: 0 18px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+}
+.brand { font-weight: bold; margin-right: auto; }
+nav a {
+    color: #b8c7dd;
+    text-decoration: none;
+    margin-left: 26px;
+}
+.container {
+    max-width: 1000px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+.card {
+    background: #111b2e;
+    border: 1px solid #263449;
+    border-radius: 12px;
+    padding: 22px;
+    margin-bottom: 22px;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 16px;
+}
+label {
+    display: block;
+    color: #9ca3af;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+input, select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px;
+    border-radius: 7px;
+    border: 1px solid #374151;
+    background: #0b1424;
+    color: white;
+}
+button, .button {
+    border: 0;
+    border-radius: 7px;
+    padding: 9px 14px;
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+.secondary { background: #334155; }
+.warning { background: #b45309; }
+.danger { background: #b91c1c; }
+.actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+}
+.notice {
+    padding: 12px;
+    background: #172554;
+    border-radius: 7px;
+    margin-bottom: 18px;
+}
+.error {
+    padding: 12px;
+    background: #450a0a;
+    color: #fecaca;
+    border-radius: 7px;
+    margin-bottom: 18px;
+}
+.info {
+    color: #94a3b8;
+    line-height: 1.6;
+}
+hr {
+    border: 0;
+    border-top: 1px solid #263449;
+    margin: 22px 0;
+}
+@media(max-width:700px) {
+    .grid { grid-template-columns: 1fr; }
+}
+</style>
+    <link rel="stylesheet" href="/static/css/navbar.css">
+</head>
+
+<body>
+
+{% set active_page = "" %}
+{% include "partials/navbar.html" %}
+
+<div class="container">
+
+<div class="actions">
+<a class="button secondary" href="/admin/users">
+    ← Torna agli utenti
+</a>
+</div>
+
+<h1>{{ user.username }}</h1>
+
+<p class="info">
+ID utente: {{ user.id }} ·
+Creato:
+{{ user.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+</p>
+
+{% if message %}
+<div class="notice">{{ message }}</div>
+{% endif %}
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+
+<div class="card">
+<h2>Profilo e autorizzazioni</h2>
+
+<form method="post"
+      action="/admin/users/{{ user.id }}/update">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<div class="grid">
+
+<div>
+<label>Username</label>
+<input type="text"
+       value="{{ user.username }}"
+       disabled>
+</div>
+
+<div>
+<label>Nome visualizzato</label>
+<input type="text"
+       name="display_name"
+       maxlength="128"
+       value="{{ user.display_name or '' }}">
+</div>
+
+<div>
+<label>E-mail</label>
+<input type="email"
+       name="email"
+       maxlength="254"
+       value="{{ user.email or '' }}">
+</div>
+
+<div>
+<label>Ruolo</label>
+<select name="role" required>
+{% for role in roles %}
+<option value="{{ role.name }}"
+{% if role.name == user.role %}selected{% endif %}>
+{{ role.name }}
+</option>
+{% endfor %}
+</select>
+</div>
+
+</div>
+
+<div class="actions">
+<button type="submit">
+Salva modifiche
+</button>
+</div>
+
+</form>
+</div>
+
+
+<div class="card">
+<h2>Password</h2>
+
+<form method="post"
+      action="/admin/users/{{ user.id }}/password">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<div class="grid">
+
+<div>
+<label>Nuova password</label>
+<input type="password"
+       name="password"
+       minlength="12"
+       required
+       autocomplete="new-password">
+</div>
+
+<div>
+<label>Conferma nuova password</label>
+<input type="password"
+       name="password_confirm"
+       minlength="12"
+       required
+       autocomplete="new-password">
+</div>
+
+</div>
+
+<p class="info">
+Il cambio password revocherà tutte le sessioni
+attive dell'utente.
+</p>
+
+<div class="actions">
+<button type="submit">
+Imposta nuova password
+</button>
+</div>
+
+</form>
+</div>
+
+
+<div class="card">
+<h2>Stato account</h2>
+
+<p class="info">
+Stato:
+<strong>
+{% if user.enabled %}
+attivo
+{% else %}
+disabilitato
+{% endif %}
+</strong><br>
+
+Tentativi falliti:
+{{ user.failed_login_count }}<br>
+
+Bloccato fino a:
+{% if user.locked_until %}
+{{ user.locked_until.strftime('%d/%m/%Y %H:%M:%S') }}
+{% else %}
+-
+{% endif %}<br>
+
+Ultimo accesso:
+{% if user.last_login_at %}
+{{ user.last_login_at.strftime('%d/%m/%Y %H:%M:%S') }}
+{% else %}
+-
+{% endif %}
+</p>
+
+<div class="actions">
+
+{% if user.failed_login_count or user.locked_until %}
+<form method="post"
+      action="/admin/users/{{ user.id }}/unlock">
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+<button class="warning" type="submit">
+Sblocca account
+</button>
+</form>
+{% endif %}
+
+{% if user.id != session.user_id %}
+<form method="post"
+      action="/admin/users/{{ user.id }}/toggle">
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+{% if user.enabled %}
+<button class="danger" type="submit">
+Disabilita account
+</button>
+{% else %}
+<button type="submit">
+Abilita account
+</button>
+{% endif %}
+
+</form>
+{% endif %}
+
+</div>
+</div>
+
+
+<div class="card">
+<h2>Autenticazione a due fattori</h2>
+
+<p class="info">
+Stato 2FA:
+<strong>
+{% if user.mfa_enabled %}
+attivo
+{% else %}
+non attivo
+{% endif %}
+</strong>
+</p>
+
+{% if user.mfa_enabled %}
+<form method="post"
+      action="/admin/users/{{ user.id }}/mfa-reset">
+
+<input type="hidden"
+       name="csrf"
+       value="{{ csrf_token }}">
+
+<button class="danger" type="submit">
+Reset 2FA
+</button>
+
+</form>
+{% else %}
+<p class="info">
+L'utente potrà attivare autonomamente il 2FA
+dalla propria pagina di sicurezza.
+</p>
+{% endif %}
+
+</div>
+
+</div>
+</body>
+</html>

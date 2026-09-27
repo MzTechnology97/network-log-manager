@@ -1,0 +1,98 @@
+<header class="nlm-header">
+
+    <a href="/" class="nlm-brand">
+        Network Log Manager
+    </a>
+
+    <nav class="nlm-main-nav">
+
+        <a href="/"
+           {% if active_page == "dashboard" %}
+           class="active"
+           {% endif %}>
+            Dashboard
+        </a>
+
+        <a href="/explorer"
+           {% if active_page == "explorer" %}
+           class="active"
+           {% endif %}>
+            Log Explorer
+        </a>
+
+        <a href="/exports"
+           {% if active_page == "exports" %}
+           class="active"
+           {% endif %}>
+            Export
+        </a>
+
+    </nav>
+
+    <details class="nlm-account-menu">
+
+        <summary>
+            <span class="nlm-account-name">
+                {{ session.display_name or session.username }}
+            </span>
+
+            <span class="nlm-chevron">▾</span>
+        </summary>
+
+        <div class="nlm-account-dropdown">
+
+            <div class="nlm-account-info">
+                <strong>
+                    {{ session.display_name or session.username }}
+                </strong>
+
+                <span>
+                    {{ session.username }}
+                </span>
+            </div>
+
+            <div class="nlm-menu-separator"></div>
+
+            <a href="/account">
+                Il mio account
+            </a>
+
+            <a href="/account/password">
+                Cambia password
+            </a>
+
+            <a href="/account/security">
+                Sicurezza / 2FA
+            </a>
+
+            {% if "Administrator" in session.roles %}
+
+            <div class="nlm-menu-separator"></div>
+
+            <a href="/admin/users">
+                Gestione utenti
+            </a>
+
+            {% endif %}
+
+            <div class="nlm-menu-separator"></div>
+
+            <form method="post"
+                  action="/logout">
+
+                <input type="hidden"
+                       name="csrf"
+                       value="{{ csrf_token }}">
+
+                <button type="submit"
+                        class="nlm-logout-button">
+                    Logout
+                </button>
+
+            </form>
+
+        </div>
+
+    </details>
+
+</header>
