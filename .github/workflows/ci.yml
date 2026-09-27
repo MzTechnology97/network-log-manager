@@ -19,66 +19,34 @@ jobs:
         run: |
           bad="$(find database/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | grep -Ev '^[0-9]{4}_[a-z0-9_-]+\.sql$' || true)"
           test -z "$bad" || { echo "$bad"; exit 1; }
-      - name: Migration immutability basics
+      - name: Migration files present
         run: |
           test -s database/migrations/0001_reference_schema.sql
           test -s database/migrations/0002_daily_log_tables.sql
       - name: No committed private keys
-        run: |
-          ! grep -RInE --exclude-dir=.git --exclude-dir=reference 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' .
-      - name: No hard-coded product secrets
+        run: "! grep -RInE --exclude-dir=.git --exclude-dir=reference 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' ."
+      - name: No obvious hard-coded secrets
         run: |
           python3 - <<'PY'
-          import pathlib, re, sys
-          roots = [pathlib.Path("config"), pathlib.Path("scripts"), pathlib.Path("systemd"), pathlib.Path("docker")]
-          assignment = re.compile(r'^(DB_ROOT_PASSWORD|SECRET_KEY|NETLOG_[A-Z_]*PASSWORD)=(.+)
-      - name: Requirements install
-        run: |
-          python3 -m venv /tmp/netlog-ci
-          /tmp/netlog-ci/bin/pip install -q -r requirements.txt
-      - name: Docker Compose validation
-        if: hashFiles('compose.yml') != ''
-        env:
-          DB_ROOT_PASSWORD: ci-root-password
-          NETLOG_APP_PASSWORD: ci-app-password
-          NETLOG_READER_PASSWORD: ci-reader-password
-          NETLOG_INGEST_PASSWORD: ci-ingest-password
-          NETLOG_MAINT_PASSWORD: ci-maint-password
-          SECRET_KEY: ci-secret-key
-          ARCHIVE_ROOT: /tmp/netlog-archive
-          SYSLOG_PORT: "5514"
-          HOSTNAME_FQDN: netlog-manager.local
-          TLS_DIR: /tmp/netlog-tls
-        run: docker compose -f compose.yml config >/dev/null
-      - name: Docker image build
-        env:
-          DB_ROOT_PASSWORD: ci-root-password
-          NETLOG_APP_PASSWORD: ci-app-password
-          NETLOG_READER_PASSWORD: ci-reader-password
-          NETLOG_INGEST_PASSWORD: ci-ingest-password
-          NETLOG_MAINT_PASSWORD: ci-maint-password
-          SECRET_KEY: ci-secret-key
-          ARCHIVE_ROOT: /tmp/netlog-archive
-          SYSLOG_PORT: "5514"
-          HOSTNAME_FQDN: netlog-manager.local
-          TLS_DIR: /tmp/netlog-tls
-        run: docker compose build app syslog proxy
-)
+          from pathlib import Path
+          import re, sys
+          names = re.compile(r'^(DB_ROOT_PASSWORD|SECRET_KEY|NETLOG_[A-Z_]*PASSWORD)=(.*)$')
           bad = []
-          for root in roots:
+          for rootname in ("config", "scripts", "systemd", "docker"):
+              root = Path(rootname)
               if not root.exists():
                   continue
               for path in root.rglob("*"):
-                  if not path.is_file() or path.suffix == ".example":
+                  if not path.is_file() or path.name.endswith(".example"):
                       continue
-                  for n, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
-                      m = assignment.match(line.strip())
-                      if not m:
+                  for no, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
+                      match = names.match(line.strip())
+                      if not match:
                           continue
-                      value = m.group(2).strip()
-                      if "$" in value or value.startswith('"$(random_secret') or value == "":
+                      value = match.group(2).strip()
+                      if not value or "$" in value or "random_secret" in value:
                           continue
-                      bad.append(f"{path}:{n}:{m.group(1)}")
+                      bad.append(f"{path}:{no}:{match.group(1)}")
           if bad:
               print("\n".join(bad))
               sys.exit(1)
@@ -88,8 +56,7 @@ jobs:
           python3 -m venv /tmp/netlog-ci
           /tmp/netlog-ci/bin/pip install -q -r requirements.txt
       - name: Docker Compose validation
-        if: hashFiles('compose.yml') != ''
-        env:
+        env: &docker-env
           DB_ROOT_PASSWORD: ci-root-password
           NETLOG_APP_PASSWORD: ci-app-password
           NETLOG_READER_PASSWORD: ci-reader-password
@@ -102,15 +69,5 @@ jobs:
           TLS_DIR: /tmp/netlog-tls
         run: docker compose -f compose.yml config >/dev/null
       - name: Docker image build
-        env:
-          DB_ROOT_PASSWORD: ci-root-password
-          NETLOG_APP_PASSWORD: ci-app-password
-          NETLOG_READER_PASSWORD: ci-reader-password
-          NETLOG_INGEST_PASSWORD: ci-ingest-password
-          NETLOG_MAINT_PASSWORD: ci-maint-password
-          SECRET_KEY: ci-secret-key
-          ARCHIVE_ROOT: /tmp/netlog-archive
-          SYSLOG_PORT: "5514"
-          HOSTNAME_FQDN: netlog-manager.local
-          TLS_DIR: /tmp/netlog-tls
+        env: *docker-env
         run: docker compose build app syslog proxy
