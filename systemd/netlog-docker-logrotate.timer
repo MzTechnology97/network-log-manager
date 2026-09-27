@@ -1,0 +1,11 @@
+[Unit]
+Description=Rotate Network Log Manager Docker live log daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=10m
+Unit=netlog-docker-logrotate.service
+
+[Install]
+WantedBy=timers.target
