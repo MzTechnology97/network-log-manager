@@ -22,7 +22,8 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from .database import app_db
-from .remote_storage import browse as storage_browse, integrity_test as storage_integrity_test, encrypt_secret, decrypt_secret
+from .remote_storage import browse as storage_browse, integrity_test as storage_integrity_test, encrypt_secret
+from .storage_registry import list_targets, get_target, health_check
 from .metrics import collect_dashboard
 from .monitoring import send_channel
 from .explorer import search_nat, ExplorerError
@@ -4148,25 +4149,28 @@ def admin_settings_page(request: Request):
         with conn.cursor() as cur:
             cur.execute("SELECT setting_key,setting_value FROM settings")
             settings={r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
-            cur.execute("SELECT id,name,channel_type,enabled FROM notification_channels ORDER BY name")
+            cur.execute("""SELECT c.id,c.name,c.channel_type,c.enabled,c.event_types_json,
+                    d.status AS last_delivery_status,d.attempted_at AS last_delivery_at,d.error_message AS last_delivery_error
+                    FROM notification_channels c
+                    LEFT JOIN notification_delivery_log d ON d.id=(
+                      SELECT d2.id FROM notification_delivery_log d2 WHERE d2.channel_id=c.id ORDER BY d2.id DESC LIMIT 1
+                    ) ORDER BY c.name""")
             channels=cur.fetchall()
             cur.execute("SELECT * FROM system_alerts WHERE resolved_at IS NULL ORDER BY severity DESC,last_seen_at DESC LIMIT 50")
             alerts=cur.fetchall()
     finally: conn.close()
     raw=request.cookies.get(COOKIE_NAME)
-    return templates.TemplateResponse(request=request,name="settings.html",context={"session":session,"csrf_token":csrf_token(raw),"settings":settings,"channels":channels,"alerts":alerts,"message":request.query_params.get("message"),"error":None})
+    return templates.TemplateResponse(request=request,name="settings.html",context={"session":session,"csrf_token":csrf_token(raw),"settings":settings,"channels":channels,"alerts":alerts,"storages":list_targets(),"message":request.query_params.get("message"),"error":None})
 
 @app.post("/admin/settings")
-def admin_settings_save(request: Request, csrf: str=Form(...), retention_days: int=Form(...), archive_after_days: int=Form(...), storage_warning_percent: int=Form(...), storage_critical_percent: int=Form(...), ingestion_stale_minutes: int=Form(...), alert_repeat_minutes: int=Form(...), external_storage_path: str=Form(...), external_storage_type: str=Form(...)):
+def admin_settings_save(request: Request, csrf: str=Form(...), retention_days: int=Form(...), archive_after_days: int=Form(...), storage_warning_percent: int=Form(...), storage_critical_percent: int=Form(...), ingestion_stale_minutes: int=Form(...), alert_repeat_minutes: int=Form(...)):
     session=get_session(request)
     if not session: return RedirectResponse("/login",status_code=303)
     if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
     if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
     if retention_days<1 or archive_after_days<1 or archive_after_days>=retention_days or not (1<=storage_warning_percent<storage_critical_percent<=99) or ingestion_stale_minutes<1 or alert_repeat_minutes<1:
         return RedirectResponse("/admin/settings?message=Invalid+settings",status_code=303)
-    allowed={"LOCAL","NFS","SMB","SFTP","S3"}
-    if external_storage_type not in allowed: return HTMLResponse("Invalid storage type",status_code=400)
-    values={"retention_days":retention_days,"archive_after_days":archive_after_days,"storage_warning_percent":storage_warning_percent,"storage_critical_percent":storage_critical_percent,"ingestion_stale_minutes":ingestion_stale_minutes,"alert_repeat_minutes":alert_repeat_minutes,"external_storage_path":external_storage_path.strip(),"external_storage_type":external_storage_type}
+    values={"retention_days":retention_days,"archive_after_days":archive_after_days,"storage_warning_percent":storage_warning_percent,"storage_critical_percent":storage_critical_percent,"ingestion_stale_minutes":ingestion_stale_minutes,"alert_repeat_minutes":alert_repeat_minutes}
     conn=app_db()
     try:
         with conn.cursor() as cur:
@@ -4216,62 +4220,108 @@ def admin_channel_delete(channel_id: int, request: Request, csrf: str=Form(...))
     return RedirectResponse("/admin/settings?message=Notification+channel+deleted",status_code=303)
 
 
-def _admin_storage_context():
-    conn=app_db()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT setting_key,setting_value FROM settings WHERE setting_key LIKE 'external_storage_%'")
-            return {r["setting_key"]:r["setting_value"] or "" for r in cur.fetchall()}
-    finally: conn.close()
-
 @app.post("/admin/settings/storage/browse")
-def admin_storage_browse(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form("")):
+def admin_storage_browse(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form(""), private_key: str=Form(""), key_passphrase: str=Form(""), endpoint: str=Form(""), bucket: str=Form(""), region: str=Form(""), access_key: str=Form(""), secret_key: str=Form("")):
     session=get_session(request)
     if not session or not is_administrator(session): return JSONResponse({"error":"Forbidden"},status_code=403)
     if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
-    cfg={"type":storage_type,"host":host,"port":port,"share":share,"path":path,"domain":domain}
-    secret={"username":username,"password":password}
-    if not username and not password:
-        try: secret=decrypt_secret(_admin_storage_context().get("external_storage_secret",""))
-        except Exception: secret={}
+    cfg={"type":storage_type,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip(),"endpoint":endpoint.strip(),"bucket":bucket.strip(),"region":region.strip(),"folder":folder.strip()}
+    secret={"username":username,"password":password,"private_key":private_key,"key_passphrase":key_passphrase,"access_key":access_key,"secret_key":secret_key}
     try:
         folders=storage_browse(cfg,secret,folder)
         return {"ok":True,"folder":folder,"folders":folders}
-    except Exception as exc:
-        return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
+    except Exception as exc: return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
 
-@app.post("/admin/settings/storage/test")
-def admin_storage_test(request: Request, csrf: str=Form(...), storage_type: str=Form(...), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form("")):
+@app.post("/admin/settings/storage/add")
+def admin_storage_add(request: Request, csrf: str=Form(...), name: str=Form(...), storage_type: str=Form(...), role: str=Form("REPLICA"), host: str=Form(""), port: str=Form(""), share: str=Form(""), path: str=Form(""), folder: str=Form(""), domain: str=Form(""), username: str=Form(""), password: str=Form(""), private_key: str=Form(""), key_passphrase: str=Form(""), endpoint: str=Form(""), bucket: str=Form(""), region: str=Form(""), access_key: str=Form(""), secret_key: str=Form(""), read_fallback: str=Form("")):
     session=get_session(request)
-    if not session or not is_administrator(session): return JSONResponse({"error":"Forbidden"},status_code=403)
-    if not valid_form_csrf(request,csrf): return JSONResponse({"error":"Invalid CSRF"},status_code=403)
-    cfg={"type":storage_type,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip()}
-    secret={"username":username,"password":password}
-    if not username and not password:
-        try: secret=decrypt_secret(_admin_storage_context().get("external_storage_secret",""))
-        except Exception: secret={}
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    kind=storage_type.upper(); role=role.upper()
+    if kind not in {"LOCAL","SMB","SFTP","S3"} or role not in {"PRIMARY","REPLICA"}: return HTMLResponse("Invalid storage",status_code=400)
+    cfg={"type":kind,"host":host.strip(),"port":port.strip(),"share":share.strip(),"path":path.strip(),"domain":domain.strip(),"endpoint":endpoint.strip(),"bucket":bucket.strip(),"region":region.strip(),"folder":folder.strip()}
+    secret={"username":username,"password":password,"private_key":private_key,"key_passphrase":key_passphrase,"access_key":access_key,"secret_key":secret_key}
     try:
         result=storage_integrity_test(cfg,secret,folder)
     except Exception as exc:
-        return JSONResponse({"ok":False,"error":str(exc)},status_code=400)
+        return RedirectResponse("/admin/settings?message=Storage+test+failed%3A+"+str(exc).replace(" ","+"),status_code=303)
     conn=app_db()
     try:
         with conn.cursor() as cur:
-            values={
-              "external_storage_enabled":"1","external_storage_type":storage_type.upper(),
-              "external_storage_host":host.strip(),"external_storage_port":port.strip(),
-              "external_storage_share":share.strip(),"external_storage_path":path.strip(),
-              "external_storage_folder":folder.strip(),"external_storage_domain":domain.strip(),
-              "external_storage_secret":encrypt_secret(secret),
-              "external_storage_test_status":"OK","external_storage_tested_at":datetime.now().isoformat(timespec="seconds"),
-              "external_storage_test_sha256":result["sha256"],
-            }
-            for key,value in values.items():
-                cur.execute("INSERT INTO settings(setting_key,setting_value) VALUES(%s,%s) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)",(key,value))
-            write_audit(cur,user_id=session["user_id"],username=session["username"],action="STORAGE_VERIFIED",category="ADMIN",request=request,details=f"{storage_type.upper()} storage verified with write/read/SHA-256 test")
+            if role=="PRIMARY": cur.execute("UPDATE storage_targets SET role='REPLICA' WHERE role='PRIMARY'")
+            cur.execute("""INSERT INTO storage_targets(name,storage_type,role,enabled,read_fallback,host,port,share_name,endpoint_url,bucket_name,region_name,base_path,folder,domain_name,secret_encrypted,health_status,test_status,tested_at,test_sha256)
+              VALUES(%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'HEALTHY','OK',NOW(3),%s)""",
+              (name.strip(),kind,role,1 if read_fallback else 0,host.strip() or None,int(port) if port.strip() else None,share.strip() or None,endpoint.strip() or None,bucket.strip() or None,region.strip() or None,path.strip(),folder.strip(),domain.strip() or None,encrypt_secret(secret) if kind!="LOCAL" else None,result.get("sha256")))
             conn.commit()
     finally: conn.close()
-    return {"ok":True,"message":"Storage verificato e salvato","sha256":result["sha256"],"bytes":result["bytes"]}
+    return RedirectResponse("/admin/settings?message=Storage+verified+and+added",status_code=303)
+
+@app.post("/admin/settings/storage/{storage_id}/primary")
+def admin_storage_primary(storage_id:int,request:Request,csrf:str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE storage_targets SET role='REPLICA' WHERE role='PRIMARY'")
+            cur.execute("UPDATE storage_targets SET role='PRIMARY',enabled=1,read_fallback=1 WHERE id=%s",(storage_id,)); conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Primary+storage+updated",status_code=303)
+
+@app.post("/admin/settings/storage/{storage_id}/health")
+def admin_storage_health(storage_id:int,request:Request,csrf:str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    row=get_target(storage_id)
+    if row: health_check(row,deep=row["storage_type"]!="LOCAL")
+    return RedirectResponse("/admin/settings?message=Storage+health+check+completed",status_code=303)
+
+@app.post("/admin/settings/storage/{storage_id}/toggle")
+def admin_storage_toggle(storage_id:int,request:Request,csrf:str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""UPDATE storage_targets SET enabled=
+              IF(role='PRIMARY' OR (storage_type='LOCAL' AND base_path='/archive/mikrotik'),1,IF(enabled=1,0,1))
+              WHERE id=%s""",(storage_id,)); conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Storage+updated",status_code=303)
+
+@app.post("/admin/settings/storage/{storage_id}/delete")
+def admin_storage_delete(storage_id:int,request:Request,csrf:str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT storage_type,base_path,role FROM storage_targets WHERE id=%s",(storage_id,)); target=cur.fetchone()
+            if target and target["storage_type"]=="LOCAL" and target["base_path"]=="/archive/mikrotik":
+                return RedirectResponse("/admin/settings?message=Default+local+storage+cannot+be+removed",status_code=303)
+            cur.execute("DELETE FROM storage_targets WHERE id=%s AND role<>'PRIMARY'",(storage_id,)); conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Storage+removed",status_code=303)
+
+@app.post("/admin/settings/storage/restore-local")
+def admin_storage_restore_local(request:Request,csrf:str=Form(...)):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE storage_targets SET role='REPLICA' WHERE role='PRIMARY'")
+            cur.execute("""SELECT id FROM storage_targets WHERE storage_type='LOCAL' AND base_path='/archive/mikrotik' ORDER BY id LIMIT 1"""); row=cur.fetchone()
+            if row: cur.execute("UPDATE storage_targets SET role='PRIMARY',enabled=1,read_fallback=1,test_status='OK' WHERE id=%s",(row["id"],))
+            else: cur.execute("""INSERT INTO storage_targets(name,storage_type,role,enabled,read_fallback,base_path,test_status) VALUES('Storage locale','LOCAL','PRIMARY',1,1,'/archive/mikrotik','OK')""")
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Local+storage+restored",status_code=303)
 
 @app.post("/admin/settings/channels/{channel_id}/toggle")
 def admin_channel_toggle(channel_id: int, request: Request, csrf: str=Form(...)):
@@ -4302,7 +4352,7 @@ def admin_channel_simple(request: Request, csrf: str=Form(...), name: str=Form(.
     else:
         cfg={"url":webhook_url}
     import json
-    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","ingestion_stale","database_unavailable","syslog_listener_down"}]
+    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down"}]
     conn=app_db()
     try:
         with conn.cursor() as cur:
@@ -4327,3 +4377,19 @@ def admin_channel_test(channel_id: int, request: Request, csrf: str=Form(...)):
         return RedirectResponse("/admin/settings?message=Notification+test+failed",status_code=303)
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Notification+test+sent",status_code=303)
+
+
+@app.post("/admin/settings/channels/{channel_id}/events")
+def admin_channel_events(channel_id:int,request:Request,csrf:str=Form(...),event_types:list[str]=Form([])):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    import json
+    allowed={"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down"}
+    selected=[x for x in event_types if x in allowed]
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE notification_channels SET event_types_json=%s WHERE id=%s",(json.dumps(selected),channel_id)); conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+events+updated",status_code=303)

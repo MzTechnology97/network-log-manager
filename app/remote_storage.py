@@ -1,4 +1,5 @@
-import base64, hashlib, json, os, posixpath, shlex, subprocess, tempfile
+import base64, hashlib, io, json, os, posixpath, shlex, subprocess, tempfile
+import boto3
 from pathlib import Path
 from cryptography.fernet import Fernet
 import paramiko
@@ -38,6 +39,31 @@ def _smb_cmd(cfg, secret, command):
     if p.returncode: raise RuntimeError((p.stderr or p.stdout).strip()[-500:])
     return p.stdout
 
+def _sftp_transport(cfg, secret):
+    t=paramiko.Transport((cfg["host"],int(cfg.get("port") or 22)))
+    username=secret.get("username","")
+    key_text=secret.get("private_key","")
+    if key_text:
+        key=None
+        last=None
+        for cls in (paramiko.Ed25519Key,paramiko.RSAKey,paramiko.ECDSAKey):
+            try:
+                key=cls.from_private_key(io.StringIO(key_text),password=secret.get("key_passphrase") or None); break
+            except Exception as exc: last=exc
+        if key is None: raise ValueError("Chiave privata SFTP non valida") from last
+        t.connect(username=username,pkey=key)
+    else:
+        t.connect(username=username,password=secret.get("password",""))
+    return t
+
+def _s3(cfg, secret):
+    return boto3.client("s3",endpoint_url=cfg.get("endpoint") or None,region_name=cfg.get("region") or None,
+        aws_access_key_id=secret.get("access_key") or None,aws_secret_access_key=secret.get("secret_key") or None)
+
+def _s3_key(cfg, relative=""):
+    prefix=_safe_folder(cfg.get("folder","")); rel=_safe_folder(relative)
+    return "/".join(x for x in (prefix,rel) if x)
+
 def browse(cfg, secret, folder=""):
     kind=cfg["type"].upper(); folder=_safe_folder(folder)
     if kind=="LOCAL":
@@ -52,13 +78,17 @@ def browse(cfg, secret, folder=""):
             if len(parts)>=2 and "D" in parts[1] and parts[0] not in (".",".."): result.append(parts[0])
         return sorted(set(result))
     if kind=="SFTP":
-        t=paramiko.Transport((cfg["host"],int(cfg.get("port") or 22)))
+        t=_sftp_transport(cfg,secret)
         try:
-            t.connect(username=secret["username"],password=secret["password"])
             s=paramiko.SFTPClient.from_transport(t); root=cfg.get("path") or "/"; target=posixpath.join(root,folder)
             return sorted([a.filename for a in s.listdir_attr(target) if (a.st_mode & 0o170000)==0o040000])
         finally: t.close()
-    raise ValueError("Browsing is supported for LOCAL, SMB and SFTP")
+    if kind=="S3":
+        prefix=_safe_folder(folder or cfg.get("folder",""))
+        if prefix: prefix+="/"
+        out=_s3(cfg,secret).list_objects_v2(Bucket=cfg["bucket"],Prefix=prefix,Delimiter="/",MaxKeys=1000)
+        return sorted(x["Prefix"][len(prefix):].rstrip("/") for x in out.get("CommonPrefixes",[]))
+    raise ValueError("Browsing is supported for LOCAL, SMB, SFTP and S3")
 
 def integrity_test(cfg, secret, folder=""):
     folder=_safe_folder(folder); payload=os.urandom(4096); digest=hashlib.sha256(payload).hexdigest()
@@ -74,15 +104,19 @@ def integrity_test(cfg, secret, folder=""):
             _smb_cmd(cfg,secret,f'put "{tmp.name}" "{remote}"; get "{remote}" "{tmp.name}.read"; del "{remote}"')
             read=Path(tmp.name+".read").read_bytes(); Path(tmp.name+".read").unlink(missing_ok=True)
     elif kind=="SFTP":
-        t=paramiko.Transport((cfg["host"],int(cfg.get("port") or 22)))
+        t=_sftp_transport(cfg,secret)
         try:
-            t.connect(username=secret["username"],password=secret["password"]); s=paramiko.SFTPClient.from_transport(t)
-            remote=posixpath.join(cfg.get("path") or "/",folder,name)
+            s=paramiko.SFTPClient.from_transport(t); remote=posixpath.join(cfg.get("path") or "/",folder,name)
             with s.open(remote,"wb") as f: f.write(payload)
             with s.open(remote,"rb") as f: read=f.read()
             s.remove(remote)
         finally: t.close()
-    else: raise ValueError("Integrity test is supported for LOCAL, SMB and SFTP")
+    elif kind=="S3":
+        client=_s3(cfg,secret); base=_safe_folder(folder or cfg.get("folder","")); key=posixpath.join(base,name) if base else name
+        client.put_object(Bucket=cfg["bucket"],Key=key,Body=payload)
+        try: read=client.get_object(Bucket=cfg["bucket"],Key=key)["Body"].read()
+        finally: client.delete_object(Bucket=cfg["bucket"],Key=key)
+    else: raise ValueError("Integrity test is supported for LOCAL, SMB, SFTP and S3")
     got=hashlib.sha256(read).hexdigest()
     if got!=digest: raise RuntimeError("Storage integrity verification failed")
     return {"ok":True,"sha256":digest,"bytes":len(payload)}
@@ -109,9 +143,9 @@ def upload_file(cfg, secret, local_path, relative_path):
         _smb_cmd(cfg,secret,f'put "{src}" "{remote}"')
         return
     if kind=="SFTP":
-        t=paramiko.Transport((cfg["host"],int(cfg.get("port") or 22)))
+        t=_sftp_transport(cfg,secret)
         try:
-            t.connect(username=secret["username"],password=secret["password"]); s=paramiko.SFTPClient.from_transport(t)
+            s=paramiko.SFTPClient.from_transport(t)
             remote=posixpath.join(cfg.get("path") or "/",_safe_folder(cfg.get("folder","")),rel)
             parent=posixpath.dirname(remote); current=""
             for part in parent.split("/"):
@@ -122,4 +156,29 @@ def upload_file(cfg, secret, local_path, relative_path):
             s.put(str(src),remote)
         finally: t.close()
         return
+    if kind=="S3":
+        _s3(cfg,secret).upload_file(str(src),cfg["bucket"],_s3_key(cfg,rel)); return
+    raise ValueError("Unsupported remote storage type")
+
+
+def download_file(cfg, secret, relative_path, local_path):
+    rel=_safe_folder(relative_path); dst=Path(local_path); dst.parent.mkdir(parents=True,exist_ok=True)
+    kind=cfg["type"].upper()
+    if kind=="LOCAL":
+        src=(Path(cfg["path"]).resolve()/rel).resolve()
+        if not src.is_file(): raise FileNotFoundError(str(src))
+        import shutil; shutil.copy2(src,dst); return
+    if kind=="SMB":
+        remote=posixpath.join(_safe_folder(cfg.get("folder","")),rel)
+        _smb_cmd(cfg,secret,f'get "{remote}" "{dst}"'); return
+    if kind=="SFTP":
+        t=_sftp_transport(cfg,secret)
+        try:
+            s=paramiko.SFTPClient.from_transport(t)
+            remote=posixpath.join(cfg.get("path") or "/",_safe_folder(cfg.get("folder","")),rel)
+            s.get(remote,str(dst))
+        finally: t.close()
+        return
+    if kind=="S3":
+        _s3(cfg,secret).download_file(cfg["bucket"],_s3_key(cfg,rel),str(dst)); return
     raise ValueError("Unsupported remote storage type")

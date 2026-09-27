@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .archive_search import get_archive, parse_tuple_line, normalize_protocol
+from .storage_registry import resolve_archive_source
 
 
 CACHE_ROOT = Path("/var/cache/netlog-manager/history")
@@ -116,16 +117,17 @@ def cache_is_valid(
     if manifest["COMPLETE"] != "1":
         return False, "cache incompleta"
 
-    if manifest["SOURCE"] != str(archive_path):
-        return False, "sorgente differente"
-
-    try:
-        source_bytes = archive_path.stat().st_size
-    except FileNotFoundError:
-        return False, "archivio sorgente assente"
-
-    if manifest["SOURCE_BYTES"] != str(source_bytes):
-        return False, "dimensione sorgente differente"
+    # With multi-storage the physical source may move between PRIMARY and
+    # fallback targets. The content SHA is authoritative when available.
+    if expected_sha256 is None:
+        if manifest["SOURCE"] != str(archive_path):
+            return False, "sorgente differente"
+        try:
+            source_bytes = archive_path.stat().st_size
+        except FileNotFoundError:
+            return False, "archivio sorgente assente"
+        if manifest["SOURCE_BYTES"] != str(source_bytes):
+            return False, "dimensione sorgente differente"
 
     if expected_rows is not None:
         if manifest["ROWS"] != str(expected_rows):
@@ -176,21 +178,18 @@ def build_cache(
             "gli archivi legacy"
         )
 
-    archive_path = Path(
-        archive["archive_path"]
-    )
-
-    if not archive_path.is_file():
-        raise ArchiveCacheError(
-            f"File non trovato: {archive_path}"
-        )
+    catalog_path = Path(archive["archive_path"])
+    expected_sha = archive.get("sha256")
+    try:
+        relative=str(catalog_path.relative_to(Path("/archive/mikrotik")))
+        archive_path, source_storage = resolve_archive_source(relative,catalog_path,expected_sha)
+    except Exception as exc:
+        raise ArchiveCacheError("Archivio non disponibile su primary/fallback: "+str(exc)) from exc
 
     expected_rows = archive.get("row_count")
 
     if expected_rows is not None:
         expected_rows = int(expected_rows)
-
-    expected_sha = archive.get("sha256")
 
     CACHE_ROOT.mkdir(
         parents=True,
