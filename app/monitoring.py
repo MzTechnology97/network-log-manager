@@ -50,7 +50,10 @@ def _record(key,severity,title,message,repeat_minutes):
             cur.execute('SELECT * FROM notification_channels WHERE enabled=1'); channels=cur.fetchall() if should_notify else []; conn.commit()
         delivered=False
         for channel in channels:
-            try: send_channel(channel,title,message); delivered=True
+            try:
+                selected=json.loads(channel.get('event_types_json') or '[]')
+                if selected and key not in selected: continue
+                send_channel(channel,title,message); delivered=True
             except Exception: pass
         if delivered:
             with conn.cursor() as cur:
