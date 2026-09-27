@@ -28,3 +28,10 @@ The application recognizes `NETLOG_DB_HOST`, `NETLOG_DB_USER`, `NETLOG_DB_PASSWO
 ## TLS
 
 Native installation initially creates a local self-signed certificate under `/etc/ssl/netlog-manager/`. Replace it with a trusted certificate where appropriate. HSTS is intentionally not enabled by default.
+
+
+## MikroTik routers
+
+For a complete RouterOS example covering CGNAT, logging of new NAT connections, remote syslog delivery, time synchronization and validation, see [MikroTik CGNAT and syslog logging](mikrotik-cgnat-syslog.md).
+
+La configurazione RouterOS completa di esempio per CGNAT, logging delle nuove connessioni NAT, invio al syslog remoto, sincronizzazione oraria e verifica è disponibile in [MikroTik CGNAT and syslog logging](mikrotik-cgnat-syslog.md).
