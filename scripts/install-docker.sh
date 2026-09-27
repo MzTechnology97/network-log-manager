@@ -23,7 +23,7 @@ fi
 
 install -d -o root -g root -m 0750 "$STATE_DIR/docker"
 install -d -o root -g root -m 0750 "$ARCHIVE_ROOT"
-install -d -o root -g root -m 0750 "$STATE_DIR/docker/config"
+install -d -o root -g root -m 0750 "$STATE_DIR/docker/config" "$STATE_DIR/docker/tls"
 
 cat >"$STATE_DIR/docker/.env" <<EOF
 DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD
@@ -35,8 +35,21 @@ SECRET_KEY=$SECRET_KEY
 SYSLOG_PORT=$SYSLOG_PORT
 ARCHIVE_ROOT=$ARCHIVE_ROOT
 TZ=$TZ
+HOSTNAME_FQDN=$HOSTNAME_FQDN
+TLS_DIR=$STATE_DIR/docker/tls
 EOF
 chmod 0600 "$STATE_DIR/docker/.env"
+
+if [[ ! -s "$STATE_DIR/docker/tls/netlog-manager.key" || ! -s "$STATE_DIR/docker/tls/netlog-manager.crt" ]]; then
+  log "Generating initial self-signed Docker TLS certificate"
+  openssl req -x509 -nodes -newkey rsa:3072 -sha256 -days 825 \
+    -keyout "$STATE_DIR/docker/tls/netlog-manager.key" \
+    -out "$STATE_DIR/docker/tls/netlog-manager.crt" \
+    -subj "/CN=$HOSTNAME_FQDN" \
+    -addext "subjectAltName=DNS:$HOSTNAME_FQDN"
+  chmod 0600 "$STATE_DIR/docker/tls/netlog-manager.key"
+  chmod 0644 "$STATE_DIR/docker/tls/netlog-manager.crt"
+fi
 
 log "Building and starting database"
 cd "$ROOT"
@@ -71,4 +84,10 @@ log "Applying tracked Docker migrations"
 log "Starting application and syslog ingestion"
 "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" up -d --build
 
-log "Docker runtime started with tracked migrations."
+"$ROOT/scripts/healthcheck.sh"
+
+echo
+log "Create the initial Administrator account."
+"${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec app python create-admin.py
+
+log "Docker installation completed."
