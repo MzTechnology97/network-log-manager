@@ -4281,7 +4281,9 @@ def admin_storage_toggle(storage_id:int,request:Request,csrf:str=Form(...)):
     conn=app_db()
     try:
         with conn.cursor() as cur:
-            cur.execute("UPDATE storage_targets SET enabled=IF(role='PRIMARY',1,IF(enabled=1,0,1)) WHERE id=%s",(storage_id,)); conn.commit()
+            cur.execute("""UPDATE storage_targets SET enabled=
+              IF(role='PRIMARY' OR (storage_type='LOCAL' AND base_path='/archive/mikrotik'),1,IF(enabled=1,0,1))
+              WHERE id=%s""",(storage_id,)); conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Storage+updated",status_code=303)
 
