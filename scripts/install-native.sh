@@ -76,4 +76,13 @@ systemctl start netlog-archive-cache.timer netlog-export-worker.path netlog-expo
 log "Persistent archive: $ARCHIVE_ROOT"
 log "Disposable historical cache: /var/cache/netlog-manager/history"
 log "Application runtime and background workers installed."
-log "Apache/HTTPS configuration and initial Administrator bootstrap are the next installation stage."
+log "Configuring Apache HTTPS reverse proxy"
+"$ROOT/scripts/configure-apache.sh"
+
+log "Creating initial Administrator"
+"$ROOT/scripts/create-initial-admin.sh"
+
+log "Running installation health check"
+"$ROOT/scripts/healthcheck.sh"
+
+log "Native installation completed successfully."
