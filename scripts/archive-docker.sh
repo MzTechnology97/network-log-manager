@@ -62,9 +62,14 @@ EOF
   (cd "$dir" && sha256sum -c "$(basename "$sha")" >/dev/null)
   # If a GUI-configured remote storage is active and verified, copy all
   # archive artifacts before the source DB table can be dropped.
-  "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$final")" --relative "$y/$m/$(basename "$final")" --sha256 "$hash"
-  "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$meta")" --relative "$y/$m/$(basename "$meta")"
-  "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$sha")" --relative "$y/$m/$(basename "$sha")"
+  if ! {
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$final")" --relative "$y/$m/$(basename "$final")" --sha256 "$hash" &&
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$meta")" --relative "$y/$m/$(basename "$meta")" &&
+    "${COMPOSE[@]}" --env-file "$ENV_FILE" exec -T app python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$sha")" --relative "$y/$m/$(basename "$sha")";
+  }; then
+    rm -f "$final" "$meta" "$sha"
+    die "Remote archive replication failed for $table; source table preserved and local partial archive reset."
+  fi
   still_exists="$(db -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB' AND table_name='$table';")"
   [[ "$still_exists" == "1" ]] || die "Source table disappeared before DROP: $table"
   db "$DB" -e "DROP TABLE \`$table\`;"
