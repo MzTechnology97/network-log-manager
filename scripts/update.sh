@@ -20,19 +20,41 @@ fi
 REPO="${REPO_ROOT:?REPO_ROOT is not configured}"
 cd "$REPO"
 
-old="$(git rev-parse HEAD)"
-log "Current revision: $old"
+checkout_revision="$(git rev-parse HEAD)"
+deployed_revision=""
+if [[ -r "$STATE_DIR/current-revision" ]]; then
+  deployed_revision="$(tr -d '[:space:]' <"$STATE_DIR/current-revision")"
+fi
+log "Checkout revision: $checkout_revision"
+if [[ -n "$deployed_revision" ]]; then
+  log "Deployed revision: $deployed_revision"
+else
+  log "Deployed revision: unknown (deployment will be applied)"
+fi
+
 git fetch --tags --prune origin
 
 case "${UPDATE_CHANNEL:-stable}" in
- stable) target="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -Ev -- '-(rc|beta|alpha)' | head -n1)";;
- candidate) target="$(git tag --list 'v*-rc*' --sort=-v:refname | head -n1)";;
+ stable)
+   target="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -Ev -- '-(rc|beta|alpha)' | head -n1 || true)"
+   ;;
+ candidate)
+   target="$(git tag --list 'v*-rc*' --sort=-v:refname | head -n1 || true)"
+   ;;
  development) target="origin/main";;
  *) die "Unknown update channel.";;
 esac
 [[ -n "$target" ]] || die "No release is available for channel ${UPDATE_CHANNEL:-stable}."
 target_commit="$(git rev-parse "$target^{commit}")"
-[[ "$target_commit" != "$old" ]] || { log "Already up to date."; exit 0; }
+if [[ "$target_commit" == "$deployed_revision" ]]; then
+  log "Deployment already up to date: $target_commit"
+  exit 0
+fi
+
+rollback_revision="$checkout_revision"
+if [[ -n "$deployed_revision" ]] && git cat-file -e "$deployed_revision^{commit}" 2>/dev/null; then
+  rollback_revision="$deployed_revision"
+fi
 
 if [[ "$MODE" == docker ]]; then
   sanitize_compose_environment
@@ -43,8 +65,8 @@ fi
 log "Pre-update backup: $backup_path"
 
 rollback(){
-  log "Rolling application code back to $old. Database migrations remain forward-only."
-  git checkout --detach "$old"
+  log "Rolling application code back to $rollback_revision. Database migrations remain forward-only."
+  git checkout --detach "$rollback_revision"
   if [[ "$MODE" == docker ]]; then
     sanitize_compose_environment
     source "$CONFIG_DIR/install.env"
