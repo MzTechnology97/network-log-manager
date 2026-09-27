@@ -21,3 +21,10 @@ The web application does not use MariaDB root. Separate identities exist for app
 ## Schema generations
 
 Historical archives may use older schemas. In particular, legacy archives can lack NAT fields. A NAT-filtered historical query must therefore report those days as unsupported rather than interpreting them as zero matches.
+
+
+## Resilient archive storage
+
+Archive storage is registry-based. A PRIMARY target is authoritative and zero or more REPLICA targets can hold independently verified copies. Supported target backends are LOCAL, SMB, SFTP and S3-compatible storage. Reads resolve the primary first and can use enabled verified replicas as fallback. The historical cache remains disposable.
+
+Periodic monitoring records storage health separately from the one-time configuration test. Replication state is tracked per archive object and replica. See [Storage, replication and monitoring](storage-monitoring.md).
