@@ -12,6 +12,15 @@ apt-get update
 apt-get install -y mariadb-server syslog-ng syslog-ng-mod-sql libdbd-mysql python3 python3-venv python3-pip apache2 zstd rsync openssl curl logrotate
 
 systemctl enable --now mariadb syslog-ng apache2
+
+log "Enabling MariaDB event scheduler persistently"
+install -d -m 0755 /etc/mysql/mariadb.conf.d
+cat > /etc/mysql/mariadb.conf.d/60-netlog-manager.cnf <<'EOF'
+[mysqld]
+event_scheduler=ON
+EOF
+systemctl restart mariadb
+mariadb --protocol=socket -uroot -N -e "SELECT @@event_scheduler" | grep -qx 'ON' || die "MariaDB event_scheduler did not start."
 id netlog >/dev/null 2>&1 || useradd --system --home /var/lib/netlog-manager --shell /usr/sbin/nologin netlog
 
 install -d -o netlog -g netlog -m 0750 /opt/netlog-manager /var/lib/netlog-manager /var/log/netlog-manager
