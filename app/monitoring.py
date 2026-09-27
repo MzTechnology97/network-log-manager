@@ -38,10 +38,10 @@ def _record(key,severity,title,message):
     conn=app_db()
     try:
         with conn.cursor() as cur:
-            cur.execute('SELECT id FROM system_alerts WHERE alert_key=%s AND resolved_at IS NULL ORDER BY id DESC LIMIT 1',(key,)); row=cur.fetchone()
+            cur.execute('SELECT id,notification_sent_at FROM system_alerts WHERE alert_key=%s AND resolved_at IS NULL ORDER BY id DESC LIMIT 1',(key,)); row=cur.fetchone()
             if row: alert_id=row['id']; cur.execute('UPDATE system_alerts SET last_seen_at=NOW(3),occurrence_count=occurrence_count+1,message=%s WHERE id=%s',(message,alert_id))
             else: cur.execute('INSERT INTO system_alerts(alert_key,severity,title,message) VALUES(%s,%s,%s,%s)',(key,severity,title,message)); alert_id=cur.lastrowid
-            cur.execute('SELECT * FROM notification_channels WHERE enabled=1'); channels=cur.fetchall(); conn.commit()
+            repeat=int(settings().get('alert_repeat_minutes','60')); should_notify=(not row or not row.get('notification_sent_at') or (datetime.now()-row['notification_sent_at']).total_seconds()>=repeat*60); cur.execute('SELECT * FROM notification_channels WHERE enabled=1'); channels=cur.fetchall() if should_notify else []; conn.commit()
         for channel in channels:
             try: send_channel(channel,title,message)
             except Exception: pass
