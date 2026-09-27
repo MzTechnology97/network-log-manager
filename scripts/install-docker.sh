@@ -113,11 +113,15 @@ install -m 0755 "$ROOT/scripts/backup-docker.sh" /opt/netlog-manager/scripts/bac
 install -m 0755 "$ROOT/scripts/restore-docker.sh" /opt/netlog-manager/scripts/restore-docker.sh
 install -m 0755 "$ROOT/scripts/migrate-docker.sh" /opt/netlog-manager/scripts/migrate-docker.sh
 install -m 0755 "$ROOT/scripts/healthcheck.sh" /opt/netlog-manager/scripts/healthcheck.sh
+install -m 0755 "$ROOT/scripts/update.sh" /opt/netlog-manager/scripts/update.sh
+install -m 0644 "$ROOT/systemd/netlog-update.service" /etc/systemd/system/netlog-update.service
+install -m 0644 "$ROOT/systemd/netlog-update.timer" /etc/systemd/system/netlog-update.timer
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.service" /etc/systemd/system/netlog-docker-archive.service
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.timer" /etc/systemd/system/netlog-docker-archive.timer
 install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.service" /etc/systemd/system/netlog-docker-logrotate.service
 install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.timer" /etc/systemd/system/netlog-docker-logrotate.timer
 systemctl daemon-reload
 systemctl enable --now netlog-docker-archive.timer netlog-docker-logrotate.timer
+systemctl disable --now netlog-update.timer >/dev/null 2>&1 || true
 
 log "Docker installation completed."
