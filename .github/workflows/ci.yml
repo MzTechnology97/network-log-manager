@@ -100,6 +100,7 @@ jobs:
           [[ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q app)")" == healthy ]]
           test -s static/css/navbar.css
           docker compose exec -T app test -s /opt/netlog-manager/static/css/navbar.css
+          docker compose exec -T syslog syslog-ng-ctl verbose --set=on || true
           printf '<134>Sep 27 18:00:00 router firewall,info connection-state:new,snat srcnat: in:bridge out:ether1, connection-state:new,snat proto UDP, 192.168.2.55:59565->8.8.4.4:443, NAT (192.168.2.55:59565->82.63.3.5:59565)->8.8.4.4:443\n' >/dev/udp/127.0.0.1/5514 || true
           for i in $(seq 1 20); do
             count="$(docker compose exec -T db mariadb -uroot -pci-root-password -N -B syslogdb -e "SELECT COUNT(*) FROM mikrotik_logs_$(date +%Y_%m_%d);" 2>/dev/null || echo 0)"
@@ -123,6 +124,10 @@ jobs:
             echo "=== HEALTHCHECK MANUAL RUN ==="
             docker compose exec -T app python /opt/netlog-manager/healthcheck.py || true
           fi
+          echo "=== SYSLOG-NG STATS ==="
+          docker compose exec -T syslog syslog-ng-ctl stats || true
+          echo "=== SYSLOG LIVE LOG ==="
+          docker compose exec -T syslog tail -n 10 /var/log/network.log || true
           echo "=== COMPOSE LOGS ==="
           docker compose logs --no-color --tail=200
       - name: Docker cleanup
