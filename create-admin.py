@@ -10,7 +10,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import HashingError
 
 
-ENV_FILE = Path("/opt/netlog-manager/config/app.env")
+ENV_FILE = Path(os.environ.get("NETLOG_ENV_FILE", "/opt/netlog-manager/config/app.env"))
 
 
 def load_env(path):
@@ -29,7 +29,7 @@ def load_env(path):
 
 
 def main():
-    env = load_env(ENV_FILE)
+    env = dict(os.environ)\n    if ENV_FILE.is_file():\n        for key, value in load_env(ENV_FILE).items():\n            env.setdefault(key, value)
 
     username = input("Username Administrator: ").strip()
 
