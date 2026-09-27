@@ -23,3 +23,8 @@ Applied migration files must never be edited. `schema_migrations` stores the che
 ## Recovery principle
 
 Application releases, MariaDB data and permanent archives are separate lifecycle domains. Replacing or rolling back application code must not delete database volumes or archive storage.
+
+
+## Archive-root permissions during Docker updates
+
+Docker updates ensure that the configured archive root exists with runtime ownership UID 10001/GID 999 and mode 0750 before deployment. This repair is deliberately non-recursive: existing historical objects are not mass-reowned. Archive data remains outside the application release lifecycle.
