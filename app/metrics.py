@@ -308,11 +308,14 @@ def collect_dashboard():
         archive_disk = None
     archive_bytes = archive_size()
     open_alerts = 0
+    active_alerts = []
     try:
         alert_conn = app_db()
         with alert_conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) AS c FROM system_alerts WHERE resolved_at IS NULL")
             open_alerts = int(cur.fetchone()['c'])
+            cur.execute("SELECT severity,title,message,last_seen_at FROM system_alerts WHERE resolved_at IS NULL ORDER BY last_seen_at DESC LIMIT 5")
+            active_alerts = cur.fetchall()
         alert_conn.close()
     except Exception:
         pass
@@ -420,5 +423,10 @@ def collect_dashboard():
             "archive_path": str(archive_path),
             "archive_disk_percent": round(archive_disk.used / archive_disk.total * 100, 1) if archive_disk and archive_disk.total else None,
             "open_alerts": open_alerts,
+            "active_alerts": active_alerts,
+            "remote_type": cfg.get("external_storage_type","LOCAL"),
+            "remote_enabled": cfg.get("external_storage_enabled","0") == "1",
+            "remote_test_status": cfg.get("external_storage_test_status","NOT_TESTED"),
+            "remote_tested_at": cfg.get("external_storage_tested_at") or None,
         },
     }
