@@ -2,6 +2,7 @@ import json, os, shutil, smtplib, ssl, urllib.request
 from datetime import datetime
 from email.message import EmailMessage
 from pathlib import Path
+import socket
 from .database import app_db, syslog_db
 
 DEFAULTS={'retention_days':'1825','archive_after_days':'365','storage_warning_percent':'80','storage_critical_percent':'90','ingestion_stale_minutes':'5','alert_repeat_minutes':'60','external_storage_enabled':'0','external_storage_type':'LOCAL','external_storage_path':'/archive/mikrotik'}
