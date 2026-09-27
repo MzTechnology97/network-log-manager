@@ -4176,17 +4176,19 @@ def admin_settings_save(request: Request, csrf: str=Form(...), retention_days: i
     return RedirectResponse("/admin/settings?message=Settings+saved",status_code=303)
 
 @app.post("/admin/settings/channels")
-def admin_channel_add(request: Request, csrf: str=Form(...), name: str=Form(...), channel_type: str=Form(...), configuration_json: str=Form(...)):
+def admin_channel_add(request: Request, csrf: str=Form(...), name: str=Form(...), channel_type: str=Form(...), configuration_json: str=Form(...), secret_json: str=Form('{}')):
     session=get_session(request)
     if not session: return RedirectResponse("/login",status_code=303)
     if not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
     if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
     import json
     if channel_type not in {"WEBHOOK","EMAIL","TELEGRAM","SLACK","DISCORD"}: return HTMLResponse("Invalid channel",status_code=400)
-    try: cfg=json.loads(configuration_json)
+    try: cfg=json.loads(configuration_json); supplied_secrets=json.loads(secret_json or '{}')
     except Exception: return HTMLResponse("Invalid JSON configuration",status_code=400)
+    if not isinstance(cfg,dict) or not isinstance(supplied_secrets,dict): return HTMLResponse("JSON objects required",status_code=400)
     secret_keys={"password","bot_token","token","secret","api_key"}
     secret_cfg={k:cfg.pop(k) for k in list(cfg) if k.lower() in secret_keys}
+    secret_cfg.update(supplied_secrets)
     conn=app_db()
     try:
         with conn.cursor() as cur:
