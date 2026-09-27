@@ -20,14 +20,14 @@ CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
 CREATE USER IF NOT EXISTS 'netlog_app'@'localhost' IDENTIFIED BY '$APP_PW';
 CREATE USER IF NOT EXISTS 'netlog_reader'@'localhost' IDENTIFIED BY '$READER_PW';
 CREATE USER IF NOT EXISTS 'netlog_ingest'@'localhost' IDENTIFIED BY '$INGEST_PW';
-CREATE USER IF NOT EXISTS 'netlog_maintenance'@'localhost' IDENTIFIED BY '$MAINT_PW';
+CREATE USER IF NOT EXISTS 'netlog_maintenance'@'%' IDENTIFIED BY '$MAINT_PW';
 ALTER USER 'netlog_app'@'localhost' IDENTIFIED BY '$APP_PW';
 ALTER USER 'netlog_reader'@'localhost' IDENTIFIED BY '$READER_PW';
 ALTER USER 'netlog_ingest'@'localhost' IDENTIFIED BY '$INGEST_PW';
-ALTER USER 'netlog_maintenance'@'localhost' IDENTIFIED BY '$MAINT_PW';
+ALTER USER 'netlog_maintenance'@'%' IDENTIFIED BY '$MAINT_PW';
 GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'localhost';
 GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'localhost';
 GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'localhost';
-GRANT CREATE ON syslogdb.* TO 'netlog_maintenance'@'localhost';
+GRANT CREATE ON syslogdb.* TO 'netlog_maintenance'@'%';
 FLUSH PRIVILEGES;
 SQL
