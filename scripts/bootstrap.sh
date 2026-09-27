@@ -4,8 +4,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/scripts/lib/common.sh"
 require_root
 
-if [[ -s "$STATE_FILE" && -s "$CONFIG_DIR/install.env" && -s "$CONFIG_DIR/secrets.env" ]]; then
+if [[ -s "$INSTALL_STATE" && -s "$CONFIG_DIR/install.env" && -s "$CONFIG_DIR/secrets.env" ]]; then
   load_install_state
+  source "$CONFIG_DIR/install.env"
   echo "=== $PRODUCT maintenance ==="
   echo "1) Resume / repair installation"
   echo "2) Reset Administrator credentials"
@@ -13,7 +14,13 @@ if [[ -s "$STATE_FILE" && -s "$CONFIG_DIR/install.env" && -s "$CONFIG_DIR/secret
   echo "4) Exit"
   read -r -p "Action [1/2/3/4]: " maintenance_choice
   case "$maintenance_choice" in
-    1) ;;
+    1)
+      case "$MODE" in
+        docker) exec "$REPO_ROOT/scripts/install-docker.sh";;
+        native) exec "$REPO_ROOT/scripts/install-native.sh";;
+        *) die "Unknown installed mode: $MODE";;
+      esac
+      ;;
     2)
       source "$CONFIG_DIR/install.env"
       if [[ "$MODE" == docker ]]; then
