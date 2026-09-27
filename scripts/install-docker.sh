@@ -92,9 +92,14 @@ log "Starting application and syslog ingestion"
 
 "$ROOT/scripts/healthcheck.sh"
 
-echo
-log "Create the initial Administrator account."
-"${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec app python create-admin.py
+admin_count="$("${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec -T db mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -B netlog_manager -e "SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id WHERE r.name='Administrator';" 2>/dev/null || echo 0)"
+if [[ "$admin_count" == "0" ]]; then
+  echo
+  log "Create the initial Administrator account."
+  "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec app python create-admin.py
+else
+  log "Administrator account already exists; skipping initial account creation."
+fi
 
 install -d -m 0755 /opt/netlog-manager/scripts
 install -m 0755 "$ROOT/scripts/archive-docker.sh" /opt/netlog-manager/scripts/archive-docker.sh
