@@ -4277,3 +4277,28 @@ def admin_channel_toggle(channel_id: int, request: Request, csrf: str=Form(...))
             conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Notification+updated",status_code=303)
+
+
+@app.post("/admin/settings/channels/simple")
+def admin_channel_simple(request: Request, csrf: str=Form(...), name: str=Form(...), channel_type: str=Form(...), destination: str=Form(""), host: str=Form(""), port: int=Form(587), username: str=Form(""), password: str=Form(""), bot_token: str=Form(""), chat_id: str=Form(""), webhook_url: str=Form(""), event_types: list[str]=Form([])):
+    session=get_session(request)
+    if not session or not is_administrator(session): return HTMLResponse("Forbidden",status_code=403)
+    if not valid_form_csrf(request,csrf): return HTMLResponse("Invalid CSRF",status_code=403)
+    kind=channel_type.upper(); allowed={"EMAIL","TELEGRAM","SLACK","DISCORD","WEBHOOK"}
+    if kind not in allowed: return HTMLResponse("Invalid channel",status_code=400)
+    cfg={}; secret={}
+    if kind=="EMAIL":
+        cfg={"host":host,"port":port,"from":username,"to":destination,"username":username,"starttls":True}; secret={"password":password}
+    elif kind=="TELEGRAM":
+        cfg={"chat_id":chat_id}; secret={"bot_token":bot_token}
+    else:
+        cfg={"url":webhook_url}
+    import json
+    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","ingestion_stale","database_unavailable","syslog_listener_down"}]
+    conn=app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO notification_channels(name,channel_type,enabled,configuration_json,secret_json,event_types_json) VALUES(%s,%s,1,%s,%s,%s)",(name.strip(),kind,json.dumps(cfg),json.dumps(secret) if secret else None,json.dumps(events)))
+            conn.commit()
+    finally: conn.close()
+    return RedirectResponse("/admin/settings?message=Notification+channel+created",status_code=303)
