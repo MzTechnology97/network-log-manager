@@ -332,7 +332,7 @@ def collect_dashboard():
             open_alerts = int(cur.fetchone()['c'])
             cur.execute("SELECT severity,title,message,last_seen_at FROM system_alerts WHERE resolved_at IS NULL ORDER BY last_seen_at DESC LIMIT 5")
             active_alerts = cur.fetchall()
-            cur.execute("""SELECT id,name,storage_type,role,enabled,read_fallback,health_status,last_health_at,last_success_at,last_error,latency_ms,free_bytes,total_bytes,test_status
+            cur.execute("""SELECT id,name,storage_type,role,enabled,read_fallback,health_status,health_failures,last_health_at,last_success_at,last_error,latency_ms,free_bytes,total_bytes,test_status
                            FROM storage_targets ORDER BY role='PRIMARY' DESC,id""")
             storage_targets = cur.fetchall()
             cur.execute("""SELECT
