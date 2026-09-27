@@ -24,10 +24,17 @@ def _safe_folder(folder):
 def _smb_cmd(cfg, secret, command):
     host=cfg["host"].strip(); share=cfg["share"].strip().strip("/\\")
     user=secret.get("username",""); password=secret.get("password","")
-    args=["smbclient",f"//{host}/{share}","-U",f"{user}%{password}","-c",command]
     domain=cfg.get("domain","").strip()
-    if domain: args[3]=f"{domain}\\{user}%{password}"
-    p=subprocess.run(args,capture_output=True,text=True,timeout=20)
+    with tempfile.NamedTemporaryFile("w",delete=False) as auth:
+        auth.write("username = "+user+"\\npassword = "+password+"\\n")
+        if domain: auth.write("domain = "+domain+"\\n")
+        auth_path=auth.name
+    os.chmod(auth_path,0o600)
+    try:
+        args=["smbclient",f"//{host}/{share}","-A",auth_path,"-c",command]
+        p=subprocess.run(args,capture_output=True,text=True,timeout=20)
+    finally:
+        Path(auth_path).unlink(missing_ok=True)
     if p.returncode: raise RuntimeError((p.stderr or p.stdout).strip()[-500:])
     return p.stdout
 
