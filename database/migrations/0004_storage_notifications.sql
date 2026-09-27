@@ -15,5 +15,6 @@ INSERT INTO settings(setting_key,setting_value) VALUES
  ('external_storage_secret',''),
  ('external_storage_test_status','NOT_TESTED'),
  ('external_storage_tested_at',''),
- ('external_storage_test_sha256','')
+ ('external_storage_test_sha256',''),
+ ('log_timestamp_timezone','UTC')
 ON DUPLICATE KEY UPDATE setting_value=setting_value;
