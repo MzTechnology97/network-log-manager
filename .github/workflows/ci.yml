@@ -26,9 +26,63 @@ jobs:
       - name: No committed private keys
         run: |
           ! grep -RInE --exclude-dir=.git --exclude-dir=reference 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' .
-      - name: No concrete secrets in product config
+      - name: No hard-coded product secrets
         run: |
-          ! grep -RInE --exclude-dir=.git --exclude-dir=reference --exclude='*.example' '^(DB_ROOT_PASSWORD|SECRET_KEY|NETLOG_[A-Z_]*PASSWORD)=.{8,}$' .
+          python3 - <<'PY'
+          import pathlib, re, sys
+          roots = [pathlib.Path("config"), pathlib.Path("scripts"), pathlib.Path("systemd"), pathlib.Path("docker")]
+          assignment = re.compile(r'^(DB_ROOT_PASSWORD|SECRET_KEY|NETLOG_[A-Z_]*PASSWORD)=(.+)
+      - name: Requirements install
+        run: |
+          python3 -m venv /tmp/netlog-ci
+          /tmp/netlog-ci/bin/pip install -q -r requirements.txt
+      - name: Docker Compose validation
+        if: hashFiles('compose.yml') != ''
+        env:
+          DB_ROOT_PASSWORD: ci-root-password
+          NETLOG_APP_PASSWORD: ci-app-password
+          NETLOG_READER_PASSWORD: ci-reader-password
+          NETLOG_INGEST_PASSWORD: ci-ingest-password
+          NETLOG_MAINT_PASSWORD: ci-maint-password
+          SECRET_KEY: ci-secret-key
+          ARCHIVE_ROOT: /tmp/netlog-archive
+          SYSLOG_PORT: "5514"
+          HOSTNAME_FQDN: netlog-manager.local
+          TLS_DIR: /tmp/netlog-tls
+        run: docker compose -f compose.yml config >/dev/null
+      - name: Docker image build
+        env:
+          DB_ROOT_PASSWORD: ci-root-password
+          NETLOG_APP_PASSWORD: ci-app-password
+          NETLOG_READER_PASSWORD: ci-reader-password
+          NETLOG_INGEST_PASSWORD: ci-ingest-password
+          NETLOG_MAINT_PASSWORD: ci-maint-password
+          SECRET_KEY: ci-secret-key
+          ARCHIVE_ROOT: /tmp/netlog-archive
+          SYSLOG_PORT: "5514"
+          HOSTNAME_FQDN: netlog-manager.local
+          TLS_DIR: /tmp/netlog-tls
+        run: docker compose build app syslog proxy
+)
+          bad = []
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in root.rglob("*"):
+                  if not path.is_file() or path.suffix == ".example":
+                      continue
+                  for n, line in enumerate(path.read_text(errors="ignore").splitlines(), 1):
+                      m = assignment.match(line.strip())
+                      if not m:
+                          continue
+                      value = m.group(2).strip()
+                      if "$" in value or value.startswith('"$(random_secret') or value == "":
+                          continue
+                      bad.append(f"{path}:{n}:{m.group(1)}")
+          if bad:
+              print("\n".join(bad))
+              sys.exit(1)
+          PY
       - name: Requirements install
         run: |
           python3 -m venv /tmp/netlog-ci
