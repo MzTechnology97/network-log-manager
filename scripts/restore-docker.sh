@@ -10,6 +10,7 @@ source "$CONFIG_DIR/secrets.env"
 backup="${1:-}"
 [[ -n "$backup" && -d "$backup" ]] || die "Usage: $0 /var/backups/netlog-manager/YYYYmmdd_HHMMSS"
 [[ -f "$backup/SHA256SUMS" && -f "$backup/netlog_manager.sql" && -f "$backup/syslogdb-schema.sql" ]] || die "Incomplete backup."
+[[ "$backup" == "$BACKUP_DIR/"* ]] || die "Refusing backup path outside $BACKUP_DIR."
 (cd "$backup" && sha256sum -c SHA256SUMS)
 cd "$REPO_ROOT"
 if docker compose version >/dev/null 2>&1; then COMPOSE=(docker compose); else COMPOSE=(docker-compose); fi
