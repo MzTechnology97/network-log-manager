@@ -1,0 +1,8 @@
+[Unit]
+Description=Rotate Network Log Manager Docker live log
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/netlog-manager/scripts/rotate-live-log-docker.sh
