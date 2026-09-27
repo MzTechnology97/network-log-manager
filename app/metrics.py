@@ -443,5 +443,6 @@ def collect_dashboard():
             "remote_enabled": cfg.get("external_storage_enabled","0") == "1",
             "remote_test_status": cfg.get("external_storage_test_status","NOT_TESTED"),
             "remote_tested_at": cfg.get("external_storage_tested_at") or None,
+            "remote_available": not any(a.get("title") == "Remote storage unavailable" or "Storage unavailable" in (a.get("title") or "") for a in active_alerts),
         },
     }
