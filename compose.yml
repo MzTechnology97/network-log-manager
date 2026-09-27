@@ -37,8 +37,21 @@ services:
       - live-log:/var/log
       - app-cache:/var/cache/netlog-manager
       - app-state:/var/lib/netlog-manager
+
+  proxy:
+    build:
+      context: docker/proxy
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      HOSTNAME_FQDN: ${HOSTNAME_FQDN:-netlog-manager.local}
+    volumes:
+      - ${TLS_DIR:-/var/lib/netlog-manager/docker/tls}:/etc/nginx/tls:ro
     ports:
-      - "127.0.0.1:8080:8080"
+      - "80:80"
+      - "443:443"
 
   archive-cache:
     build: .
