@@ -6,7 +6,9 @@ from .remote_storage import decrypt_secret, integrity_test, browse, upload_file,
 def _cfg(row):
     return {"type":row["storage_type"],"host":row.get("host") or "","port":row.get("port") or "",
             "share":row.get("share_name") or "","path":row.get("base_path") or "",
-            "folder":row.get("folder") or "","domain":row.get("domain_name") or ""}
+            "folder":row.get("folder") or "","domain":row.get("domain_name") or "",
+            "endpoint":row.get("endpoint_url") or "","bucket":row.get("bucket_name") or "",
+            "region":row.get("region_name") or ""}
 
 def _secret(row):
     try: return decrypt_secret(row.get("secret_encrypted") or "")
@@ -49,6 +51,13 @@ def health_check(row, deep=False):
         free=total=None
         if row["storage_type"]=="LOCAL":
             usage=shutil.disk_usage(Path(row["base_path"])); free=usage.free; total=usage.total
+        elif row["storage_type"]=="SFTP":
+            from .remote_storage import _sftp_transport
+            t=_sftp_transport(cfg,secret)
+            try:
+                s=__import__("paramiko").SFTPClient.from_transport(t)
+                st=s.statvfs(cfg.get("path") or "/"); free=st.f_bavail*st.f_frsize; total=st.f_blocks*st.f_frsize
+            finally: t.close()
         status="HEALTHY"; error=None; failures=0
     except Exception as exc:
         latency=round((time.monotonic()-started)*1000,2); free=total=None
