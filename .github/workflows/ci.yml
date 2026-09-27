@@ -55,6 +55,19 @@ jobs:
         run: |
           python3 -m venv /tmp/netlog-ci
           /tmp/netlog-ci/bin/pip install -q -r requirements.txt
+      - name: Storage integrity helper
+        env:
+          SECRET_KEY: ci-secret-key
+        run: |
+          /tmp/netlog-ci/bin/python - <<'PY'
+          import tempfile
+          from app.remote_storage import integrity_test, encrypt_secret, decrypt_secret
+          with tempfile.TemporaryDirectory() as root:
+              result=integrity_test({"type":"LOCAL","path":root},{})
+              assert result["ok"] and result["bytes"] == 4096
+          token=encrypt_secret({"username":"nas-user","password":"secret"})
+          assert decrypt_secret(token)["username"] == "nas-user"
+          PY
       - name: Docker Compose validation
         env: &docker-env
           DB_ROOT_PASSWORD: ci-root-password
