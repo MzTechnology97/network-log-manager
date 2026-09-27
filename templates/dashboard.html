@@ -400,8 +400,8 @@ footer {
 
     <section class="card span2">
         <div class="label">Archive Storage</div>
-        <div id="remote-storage" class="value">—</div>
-        <div id="remote-storage-detail" class="sub">—</div>
+        <div id="primary-storage" class="value">—</div>
+        <div id="storage-targets" class="sub">—</div>
     </section>
 
     <section class="card span2">
@@ -652,16 +652,24 @@ async function refresh() {
         ).textContent =
             uptime(d.system.uptime_seconds);
 
-        const remoteOk = !d.storage.remote_enabled || (d.storage.remote_test_status === "OK" && d.storage.remote_available);
-        document.getElementById("remote-storage").textContent =
-            d.storage.remote_enabled ? d.storage.remote_type : "Local";
-        document.getElementById("remote-storage").className =
-            "value " + (remoteOk ? "good-text" : "bad-text");
-        document.getElementById("remote-storage-detail").textContent =
-            d.storage.remote_enabled
-                ? ("Test " + (d.storage.remote_test_status || "NOT_TESTED") +
-                   (d.storage.remote_tested_at ? " · " + d.storage.remote_tested_at : ""))
-                : "Archivio locale";
+        const targets = d.storage.targets || [];
+        const primary = d.storage.primary;
+        document.getElementById("primary-storage").textContent =
+            primary ? primary.name : "No primary";
+        document.getElementById("primary-storage").className =
+            "value " + (primary && primary.health_status === "HEALTHY" ? "good-text" : "bad-text");
+        document.getElementById("storage-targets").innerHTML =
+            targets.length ? targets.map(s => {
+                const ok=s.health_status === "HEALTHY";
+                const latency=s.latency_ms === null ? "—" : Number(s.latency_ms).toFixed(0)+" ms";
+                return (ok ? "● " : "○ ") + s.name + " [" + s.role + "] " +
+                    s.health_status + " · " + latency;
+            }).join("<br>") : "Nessuno storage configurato";
+        const repl=d.storage.replication || {};
+        if ((repl.pending||0) || (repl.failed||0)) {
+            document.getElementById("storage-targets").innerHTML +=
+              "<br>Replica: " + (repl.pending||0) + " pending · " + (repl.failed||0) + " failed";
+        }
 
         document.getElementById("active-alert-count").textContent =
             num(d.storage.open_alerts);
