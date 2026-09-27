@@ -84,7 +84,7 @@ def browse(cfg, secret, folder=""):
             return sorted([a.filename for a in s.listdir_attr(target) if (a.st_mode & 0o170000)==0o040000])
         finally: t.close()
     if kind=="S3":
-        prefix=_s3_key(cfg,folder)
+        prefix=_safe_folder(folder or cfg.get("folder",""))
         if prefix: prefix+="/"
         out=_s3(cfg,secret).list_objects_v2(Bucket=cfg["bucket"],Prefix=prefix,Delimiter="/",MaxKeys=1000)
         return sorted(x["Prefix"][len(prefix):].rstrip("/") for x in out.get("CommonPrefixes",[]))
@@ -112,7 +112,7 @@ def integrity_test(cfg, secret, folder=""):
             s.remove(remote)
         finally: t.close()
     elif kind=="S3":
-        client=_s3(cfg,secret); key=_s3_key(cfg,posixpath.join(folder,name))
+        client=_s3(cfg,secret); base=_safe_folder(folder or cfg.get("folder","")); key=posixpath.join(base,name) if base else name
         client.put_object(Bucket=cfg["bucket"],Key=key,Body=payload)
         try: read=client.get_object(Bucket=cfg["bucket"],Key=key)["Body"].read()
         finally: client.delete_object(Bucket=cfg["bucket"],Key=key)
