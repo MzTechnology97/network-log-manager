@@ -45,17 +45,21 @@ for table in "${tables[@]}"; do
   mv "$tmp" "$final"
   hash="$(sha256sum "$final" | awk '{print $1}')"
   bytes="$(stat -c '%s' "$final")"
+  uncompressed_bytes="$(zstdcat "$final" | wc -c)"
   cat >"$meta" <<EOF
 TABLE=$table
 DATE=$y-$m-$d
 ROWS=$rows
 COMPRESSED_BYTES=$bytes
+UNCOMPRESSED_BYTES=$uncompressed_bytes
 SHA256=$hash
 ARCHIVED_AT=$(date --iso-8601=seconds)
 RETENTION_POLICY=current_year
 EOF
   printf '%s  %s\n' "$hash" "$(basename "$final")" >"$sha"
   (cd "$dir" && sha256sum -c "$(basename "$sha")" >/dev/null)
+  still_exists="$(db -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB' AND table_name='$table';")"
+  [[ "$still_exists" == "1" ]] || die "Source table disappeared before DROP: $table"
   db "$DB" -e "DROP TABLE \`$table\`;"
   ((done_count+=1))
   log "Archived and removed $table"
