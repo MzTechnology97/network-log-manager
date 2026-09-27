@@ -80,7 +80,13 @@ jobs:
           mkdir -p /tmp/netlog-archive /tmp/netlog-tls
           openssl req -x509 -nodes -newkey rsa:2048 -days 1 -keyout /tmp/netlog-tls/netlog-manager.key -out /tmp/netlog-tls/netlog-manager.crt -subj "/CN=netlog-manager.local" >/dev/null 2>&1
           docker compose up -d db
-          for i in $(seq 1 30); do docker compose exec -T db mariadb-admin ping -uroot -pci-root-password --silent && break; sleep 2; done
+          for i in $(seq 1 60); do
+            state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$(docker compose ps -q db)" 2>/dev/null || echo starting)"
+            [[ "$state" == healthy ]] && break
+            [[ "$state" == unhealthy ]] && { docker compose logs db; exit 1; }
+            sleep 2
+          done
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q db)")" == healthy ]]
           docker compose exec -T db mariadb -uroot -pci-root-password -e "CREATE DATABASE IF NOT EXISTS netlog_manager; CREATE DATABASE IF NOT EXISTS syslogdb; CREATE USER IF NOT EXISTS 'netlog_app'@'%' IDENTIFIED BY 'ci-app-password'; CREATE USER IF NOT EXISTS 'netlog_reader'@'%' IDENTIFIED BY 'ci-reader-password'; CREATE USER IF NOT EXISTS 'netlog_ingest'@'%' IDENTIFIED BY 'ci-ingest-password'; GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%'; GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%'; GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%';"
           for f in database/migrations/*.sql; do docker compose exec -T db mariadb -uroot -pci-root-password < "$f"; done
           docker compose up -d app syslog proxy
