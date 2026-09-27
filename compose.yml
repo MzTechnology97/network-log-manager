@@ -108,7 +108,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment: *app-env
+    environment:
+      <<: *app-env
+      SYSLOG_LISTENER_HOST: syslog
+      SYSLOG_LISTENER_PORT: "5514"
     volumes:
       - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
       - live-log:/var/log:ro
