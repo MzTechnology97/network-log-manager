@@ -65,12 +65,10 @@ SET GLOBAL event_scheduler=ON;
 FLUSH PRIVILEGES;
 SQL
 
-log "Applying initial Docker schema"
-for migration in "$ROOT"/database/migrations/*.sql; do
-  "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" exec -T db mariadb -uroot "-p$DB_ROOT_PASSWORD" <"$migration"
-done
+log "Applying tracked Docker migrations"
+"$ROOT/scripts/migrate-docker.sh"
 
 log "Starting application and syslog ingestion"
 "${COMPOSE[@]}" --env-file "$STATE_DIR/docker/.env" up -d --build
 
-log "Docker runtime started. Apache/TLS frontend and container-native migration tracking remain release blockers."
+log "Docker runtime started with tracked migrations."
