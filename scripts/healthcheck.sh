@@ -10,7 +10,7 @@ if [[ "$MODE" == docker ]]; then
   cd "$REPO_ROOT"
   if docker compose version >/dev/null 2>&1; then COMPOSE=(docker compose); else COMPOSE=(docker-compose); fi
   ENV_FILE="$STATE_DIR/docker/.env"
-  for service in db app proxy syslog archive-cache export-worker export-cleanup; do
+  for service in db app proxy syslog archive-cache export-worker export-cleanup monitor; do
     id="$("${COMPOSE[@]}" --env-file "$ENV_FILE" ps -q "$service")"
     [[ -n "$id" ]] || die "Docker service $service is missing."
     state="$(docker inspect -f '{{.State.Status}}' "$id")"
