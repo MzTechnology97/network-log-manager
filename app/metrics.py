@@ -317,17 +317,40 @@ def collect_dashboard():
     except Exception:
         pass
 
-    pipeline_ok = bool(
-        db.get("connected")
-        and db.get("table_exists")
+    listener_host = ENV.get("SYSLOG_LISTENER_HOST", "127.0.0.1")
+    listener_port = int(ENV.get("SYSLOG_LISTENER_PORT", "5514"))
+    listener_ok = service_port(listener_host, listener_port)
+
+    has_received_logs = bool(db.get("last_row"))
+    ingestion_fresh = bool(
+        has_received_logs
         and log_age is not None
         and log_age < 60
     )
+
+    services_ok = bool(
+        db.get("connected")
+        and listener_ok
+        and db.get("table_exists")
+    )
+
+    pipeline_ok = bool(services_ok and ingestion_fresh)
+    if not services_ok:
+        pipeline_state = "unavailable"
+    elif not has_received_logs:
+        pipeline_state = "waiting"
+    elif ingestion_fresh:
+        pipeline_state = "operational"
+    else:
+        pipeline_state = "stale"
 
     return {
         "generated_at": now.isoformat(),
         "pipeline": {
             "ok": pipeline_ok,
+            "state": pipeline_state,
+            "services_ok": services_ok,
+            "has_received_logs": has_received_logs,
             "log_age_seconds": (
                 round(log_age, 1)
                 if log_age is not None
@@ -336,10 +359,9 @@ def collect_dashboard():
         },
         "services": {
             "mariadb": bool(db.get("connected")),
-            "syslog_listener": service_port(
-                "127.0.0.1",
-                5514,
-            ),
+            "syslog_listener": listener_ok,
+            "syslog_listener_host": listener_host,
+            "syslog_listener_port": listener_port,
         },
         "ingestion": {
             "logs_per_second": rate,
