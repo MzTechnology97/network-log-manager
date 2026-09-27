@@ -34,7 +34,7 @@ services:
       LIVE_LOG: /var/log/network.log
     volumes:
       - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:ro
-      - live-log:/var/log
+      - live-log:/var/log:ro
       - app-cache:/var/cache/netlog-manager
       - app-state:/var/lib/netlog-manager
 
@@ -45,8 +45,6 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    environment:
-      HOSTNAME_FQDN: ${HOSTNAME_FQDN:-netlog-manager.local}
     volumes:
       - ${TLS_DIR:-/var/lib/netlog-manager/docker/tls}:/etc/nginx/tls:ro
     ports:
