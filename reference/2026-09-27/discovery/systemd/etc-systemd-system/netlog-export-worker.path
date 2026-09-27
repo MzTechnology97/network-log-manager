@@ -1,9 +1,0 @@
-[Unit]
-Description=Network Log Manager - Export Queue Watch
-
-[Path]
-PathChanged=/var/lib/netlog-manager/export-queue.trigger
-Unit=netlog-export-worker.service
-
-[Install]
-WantedBy=multi-user.target

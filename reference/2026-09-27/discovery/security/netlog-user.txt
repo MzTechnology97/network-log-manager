@@ -1,4 +1,0 @@
-# Command: id netlog
-# Date: 2026-09-27T10:00:16+02:00
-
-uid=997(netlog) gid=996(netlog) gruppi=996(netlog)

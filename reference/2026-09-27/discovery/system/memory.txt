@@ -1,6 +1,0 @@
-# Command: free -h
-# Date: 2026-09-27T09:59:51+02:00
-
-               total        used        free      shared  buff/cache   available
-Mem:           3,8Gi       886Mi       114Mi       3,4Mi       3,1Gi       3,0Gi
-Swap:          974Mi       410Mi       564Mi

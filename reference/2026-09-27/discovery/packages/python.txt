@@ -1,4 +1,0 @@
-# Command: python3 --version
-# Date: 2026-09-27T09:59:51+02:00
-
-Python 3.11.2

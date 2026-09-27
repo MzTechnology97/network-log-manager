@@ -1,6 +1,0 @@
-# Command: ip rule show
-# Date: 2026-09-27T09:59:55+02:00
-
-0:	from all lookup local
-32766:	from all lookup main
-32767:	from all lookup default

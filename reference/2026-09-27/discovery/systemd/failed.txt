@@ -1,5 +1,0 @@
-# Command: systemctl --failed
-# Date: 2026-09-27T10:00:02+02:00
-
-  UNIT LOAD ACTIVE SUB DESCRIPTION
-0 loaded units listed.
