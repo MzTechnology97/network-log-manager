@@ -4353,7 +4353,7 @@ def admin_channel_simple(request: Request, csrf: str=Form(...), name: str=Form(.
     else:
         cfg={"url":webhook_url}
     import json
-    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down"}]
+    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down","service_unhealthy"}]
     conn=app_db()
     try:
         with conn.cursor() as cur:
