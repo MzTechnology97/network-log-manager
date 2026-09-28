@@ -124,9 +124,12 @@ jobs:
           done
           [[ "$count" =~ ^[0-9]+$ ]] && (( count > 0 ))
           echo "=== BSD SYSLOG INGESTED: $count row(s) ==="
+          # syslog-ng routes SQL tables by sender date (S_YEAR/S_MONTH/S_DAY) and
+          # dont-create-tables is intentional: pre-create the historical fixture table.
+          docker compose exec -T db mariadb -uroot -pci-root-password syslogdb -e "CREATE TABLE IF NOT EXISTS mikrotik_logs_2026_09_27 LIKE mikrotik_logs_$(date +%Y_%m_%d);"
           printf '<134>2026-09-27T20:00:00+02:00 router firewall,info connection-state:new,snat srcnat: in:bridge out:ether1, connection-state:new,snat proto TCP, 192.168.2.56:59566->1.1.1.1:443, NAT (192.168.2.56:59566->82.63.3.5:59566)->1.1.1.1:443\n' | nc -u -w 1 127.0.0.1 "${SYSLOG_PORT:-5514}"
           for i in $(seq 1 20); do
-            local_ts="$(docker compose exec -T db mariadb -uroot -pci-root-password -N -B syslogdb -e "SELECT DATE_FORMAT(timestamp,'%Y-%m-%d %H:%i:%s') FROM mikrotik_logs_$(date +%Y_%m_%d) WHERE source_ip='192.168.2.56' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
+            local_ts="$(docker compose exec -T db mariadb -uroot -pci-root-password -N -B syslogdb -e "SELECT DATE_FORMAT(timestamp,'%Y-%m-%d %H:%i:%s') FROM mikrotik_logs_2026_09_27 WHERE source_ip='192.168.2.56' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
             [[ "$local_ts" == "2026-09-27 20:00:00" ]] && break
             sleep 1
           done
