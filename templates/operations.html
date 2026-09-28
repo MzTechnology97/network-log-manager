@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Operations - Network Log Manager</title>
+  <link rel="stylesheet" href="/static/css/navbar.css">
+  <style>
+    body{font-family:system-ui,sans-serif;margin:0;background:#f5f6f8;color:#1d2430}
+    main{max-width:1400px;margin:24px auto;padding:0 20px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}
+    .card{background:white;border:1px solid #dfe3e8;border-radius:10px;padding:14px}
+    .status{font-weight:700}.HEALTHY{color:#18794e}.DEGRADED{color:#9a6700}.DOWN{color:#cf222e}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+    input,select,button{padding:8px 10px}
+    #terminal{background:#0d1117;color:#c9d1d9;border-radius:10px;padding:14px;height:520px;overflow:auto;white-space:pre-wrap;font:13px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .muted{color:#667085;font-size:.9rem}
+  </style>
+</head>
+<body>
+{% include "partials/navbar.html" %}
+<main>
+  <h1>Operations / Monitoraggio</h1>
+  <p class="muted">Stato funzionale dei componenti e console dei log. Aggiornamento automatico ogni 5 secondi.</p>
+  <div id="services" class="grid">
+    {% for s in services %}
+    <div class="card"><strong>{{ s.name }}</strong><div class="status {{ s.status }}">{{ s.status }}</div><div class="muted">{{ s.detail }}</div></div>
+    {% endfor %}
+  </div>
+  <h2>Console log realtime</h2>
+  <div class="toolbar">
+    <select id="source"><option value="syslog-ng">syslog-ng / network.log</option></select>
+    <select id="severity"><option value="">Tutti i livelli</option><option>DEBUG</option><option>INFO</option><option>WARNING</option><option>ERROR</option><option>CRITICAL</option></select>
+    <input id="query" placeholder="Cerca nel log">
+    <button id="pause">Pausa</button>
+    <label><input type="checkbox" id="scroll" checked> autoscroll</label>
+  </div>
+  <div id="terminal">Caricamento…</div>
+</main>
+<script>
+let paused=false;
+const esc=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+async function refreshStatus(){
+  const r=await fetch('/admin/operations/status'); if(!r.ok)return;
+  const d=await r.json();
+  document.getElementById('services').innerHTML=d.services.map(s=>'<div class="card"><strong>'+esc(s.name)+'</strong><div class="status '+s.status+'">'+esc(s.status)+'</div><div class="muted">'+esc(s.detail)+'</div></div>').join('');
+}
+async function refreshLogs(){
+  if(paused)return;
+  const q=document.getElementById('query').value;
+  const sev=document.getElementById('severity').value;
+  const combined=[q,sev].filter(Boolean).join(' ');
+  const r=await fetch('/admin/operations/logs?limit=300&q='+encodeURIComponent(combined)); if(!r.ok)return;
+  const d=await r.json(), t=document.getElementById('terminal');
+  t.textContent=d.lines.join('\n') || '(nessuna riga corrispondente)';
+  if(document.getElementById('scroll').checked)t.scrollTop=t.scrollHeight;
+}
+document.getElementById('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Riprendi':'Pausa'};
+setInterval(refreshStatus,5000); setInterval(refreshLogs,3000); refreshStatus(); refreshLogs();
+</script>
+</body>
+</html>
