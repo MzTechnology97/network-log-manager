@@ -130,11 +130,13 @@ services:
       <<: *app-env
       SYSLOG_LISTENER_HOST: syslog
       SYSLOG_LISTENER_PORT: "5514"
+      OPS_STATUS_FILE: /var/lib/netlog-manager/ops-host/status.tsv
     volumes:
       - ${ARCHIVE_ROOT:-/archive/mikrotik}:/archive/mikrotik:rw
       - live-log:/var/log:ro
       - app-cache:/var/cache/netlog-manager
       - app-state:/var/lib/netlog-manager
+      - ${OPS_ROOT:-/var/lib/netlog-manager/ops}:/var/lib/netlog-manager/ops-host:ro
 
   syslog:
     build:
