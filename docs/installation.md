@@ -15,7 +15,7 @@ sudo ./scripts/bootstrap.sh
 ```
 Il bootstrap richiede modalità, hostname/IP, porta syslog, timezone e percorso archivio. Le credenziali interne sono generate automaticamente. L'account Administrator iniziale viene creato una sola volta.
 
-I dati persistenti non devono essere cancellati durante gli aggiornamenti. L'archivio storico è esterno al ciclo di vita delle immagini Docker.
+I dati persistenti non devono essere cancellati durante gli aggiornamenti. L'archivio storico è esterno al ciclo di vita delle immagini Docker. Il runtime applicativo/monitor usa UID 10001 e GID 999; il bootstrap prepara la root archivio con permessi compatibili senza richiedere privilegi di mount ai container.
 
 ### Native
 Lo stesso bootstrap permette la modalità native. Installa MariaDB, syslog-ng, Python/venv, Apache e unità systemd.

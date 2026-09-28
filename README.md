@@ -116,6 +116,7 @@ Detailed documentation is maintained directly in `docs/`:
 - [Configuration and files](docs/configuration.md)
 - [MikroTik CGNAT and syslog logging / Configurazione MikroTik CGNAT e syslog](docs/mikrotik-cgnat-syslog.md)
 - [Operations](docs/operations.md)
+- [Storage, replication and monitoring](docs/storage-monitoring.md)
 - [Database and retention](docs/database-retention.md)
 - [Updates and recovery](docs/updates-recovery.md)
 - [Security](docs/security.md)

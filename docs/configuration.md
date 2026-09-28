@@ -35,3 +35,10 @@ Native installation initially creates a local self-signed certificate under `/et
 For a complete RouterOS example covering CGNAT, logging of new NAT connections, remote syslog delivery, time synchronization and validation, see [MikroTik CGNAT and syslog logging](mikrotik-cgnat-syslog.md).
 
 La configurazione RouterOS completa di esempio per CGNAT, logging delle nuove connessioni NAT, invio al syslog remoto, sincronizzazione oraria e verifica è disponibile in [MikroTik CGNAT and syslog logging](mikrotik-cgnat-syslog.md).
+
+
+## Storage and notifications
+
+The default archive target is `Storage locale` at `/archive/mikrotik`. Additional LOCAL, SMB, SFTP and S3-compatible targets are configured from **Impostazioni**. Remote secrets are encrypted at rest and are not redisplayed. A target is activated only after write/read/SHA-256/delete verification.
+
+Notification channels can subscribe independently to storage health, replication, capacity, local-storage availability, ingestion freshness, database and syslog-listener events. See [Storage, replication and monitoring](storage-monitoring.md).

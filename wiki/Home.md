@@ -12,6 +12,7 @@ Network Log Manager collects network logs, normalizes MikroTik events, maintains
 - [Configurazione / Configuration](Configuration)
 - [Database e retention / Database and Retention](Database-and-Retention)
 - [Operazioni / Operations](Operations)
+- [Storage, replica e monitoraggio / Storage, Replication and Monitoring](Storage-Replication-and-Monitoring)
 - [Backup, restore e aggiornamenti / Backup Restore and Updates](Backup-Restore-and-Updates)
 - [Sicurezza / Security](Security)
 - [Troubleshooting](Troubleshooting)
