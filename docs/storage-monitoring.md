@@ -41,7 +41,7 @@ Alert event keys are:
 - `database_unavailable`
 - `syslog_listener_down`
 
-Open alerts are updated while the condition persists and resolved when the condition disappears. Repeated alert delivery is rate-limited by `alert_repeat_minutes`.
+Open alerts are updated while the condition persists and resolved when the condition disappears. When an open condition recovers, the same channels subscribed to that event type receive a one-shot `RECOVERY` notification. Recovery attempts are audited with the `:recovery` suffix in `notification_delivery_log`. Repeated incident delivery is rate-limited by `alert_repeat_minutes`.
 
 Notification transports: Telegram, e-mail/SMTP, Slack, Discord and generic webhook. Each channel can subscribe to selected event types. Automatic delivery attempts are persisted in `notification_delivery_log` as `SENT` or `FAILED`, including the error text for failed attempts.
 
