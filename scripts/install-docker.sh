@@ -23,7 +23,7 @@ else
   die "Docker Compose is unavailable."
 fi
 
-install -d -o root -g root -m 0750 "$STATE_DIR/docker"
+install -d -o root -g root -m 0750 "$STATE_DIR/docker" "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
 # The application and monitor containers run as UID/GID 10001 and perform\n# storage integrity probes (write/read/hash/delete) on the local archive.\ninstall -d -o 10001 -g 999 -m 0750 "$ARCHIVE_ROOT"
 install -d -o root -g root -m 0750 "$STATE_DIR/docker/config" "$STATE_DIR/docker/tls"
 
@@ -39,6 +39,7 @@ ARCHIVE_ROOT=$ARCHIVE_ROOT
 TZ=$TZ
 HOSTNAME_FQDN=$HOSTNAME_FQDN
 TLS_DIR=$STATE_DIR/docker/tls
+OPS_ROOT=$STATE_DIR/ops
 EOF
 chmod 0600 "$STATE_DIR/docker/.env"
 
@@ -135,8 +136,10 @@ install -m 0755 "$ROOT/scripts/restore-docker.sh" /opt/netlog-manager/scripts/re
 install -m 0755 "$ROOT/scripts/migrate-docker.sh" /opt/netlog-manager/scripts/migrate-docker.sh
 install -m 0755 "$ROOT/scripts/healthcheck.sh" /opt/netlog-manager/scripts/healthcheck.sh
 install -m 0755 "$ROOT/scripts/update.sh" /opt/netlog-manager/scripts/update.sh
+install -m 0755 "$ROOT/scripts/ops-agent.sh" /opt/netlog-manager/scripts/ops-agent.sh
 install -m 0644 "$ROOT/systemd/netlog-update.service" /etc/systemd/system/netlog-update.service
 install -m 0644 "$ROOT/systemd/netlog-update.timer" /etc/systemd/system/netlog-update.timer
+install -m 0644 "$ROOT/systemd/netlog-ops-agent.service" /etc/systemd/system/netlog-ops-agent.service
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.service" /etc/systemd/system/netlog-docker-archive.service
 install -m 0644 "$ROOT/systemd/netlog-docker-archive.timer" /etc/systemd/system/netlog-docker-archive.timer
 install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.service" /etc/systemd/system/netlog-docker-logrotate.service
@@ -144,7 +147,7 @@ install -m 0644 "$ROOT/systemd/netlog-docker-logrotate.timer" /etc/systemd/syste
 install -m 0644 "$ROOT/systemd/netlog-docker-retention.service" /etc/systemd/system/netlog-docker-retention.service
 install -m 0644 "$ROOT/systemd/netlog-docker-retention.timer" /etc/systemd/system/netlog-docker-retention.timer
 systemctl daemon-reload
-systemctl enable --now netlog-docker-archive.timer netlog-docker-logrotate.timer netlog-docker-retention.timer
+systemctl enable --now netlog-docker-archive.timer netlog-docker-logrotate.timer netlog-docker-retention.timer netlog-ops-agent.service
 systemctl disable --now netlog-update.timer >/dev/null 2>&1 || true
 
 log "Docker installation completed."
