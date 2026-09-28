@@ -78,6 +78,15 @@ def _record(key,severity,title,message,repeat_minutes):
                 cur.execute('UPDATE system_alerts SET notification_sent_at=NOW(3) WHERE id=%s',(alert_id,)); conn.commit()
     finally: conn.close()
 
+def _delivery_log(conn, alert_id, channel_id, event_type, status, error=None):
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO notification_delivery_log
+                       (alert_id,channel_id,event_type,status,attempted_at,error_message)
+                       VALUES(%s,%s,%s,%s,NOW(3),%s)""",
+                    (alert_id,channel_id,event_type,status,(str(error)[:1000] if error else None)))
+    conn.commit()
+
+
 def _resolve_inactive(active):
     inactive=[key for key in ALERT_KEYS if key not in active]
     if not inactive: return
@@ -85,7 +94,38 @@ def _resolve_inactive(active):
     try:
         with conn.cursor() as cur:
             placeholders=','.join(['%s']*len(inactive))
-            cur.execute('UPDATE system_alerts SET resolved_at=NOW(3) WHERE resolved_at IS NULL AND alert_key IN ('+placeholders+')',tuple(inactive)); conn.commit()
+            cur.execute('SELECT id,alert_key,title,message,first_seen_at,last_seen_at FROM system_alerts WHERE resolved_at IS NULL AND alert_key IN ('+placeholders+')',tuple(inactive))
+            resolved=cur.fetchall()
+            if not resolved:
+                return
+            ids=[row['id'] for row in resolved]
+            id_marks=','.join(['%s']*len(ids))
+            cur.execute('UPDATE system_alerts SET resolved_at=NOW(3) WHERE id IN ('+id_marks+')',tuple(ids))
+            cur.execute('SELECT * FROM notification_channels WHERE enabled=1')
+            channels=cur.fetchall()
+            conn.commit()
+
+        # Recovery uses the same configured event subscription as the incident.
+        # It is emitted exactly once when an open alert transitions to resolved.
+        for row in resolved:
+            duration=''
+            if row.get('first_seen_at'):
+                seconds=max(0,int((datetime.now()-row['first_seen_at']).total_seconds()))
+                duration=' Downtime/condition duration: %ss.' % seconds
+            title='RECOVERY: '+row['title']
+            message='Condition recovered. Previous alert: '+row['message']+duration
+            for channel in channels:
+                selected=json.loads(channel.get('event_types_json') or '[]')
+                if selected and row['alert_key'] not in selected:
+                    continue
+                try:
+                    send_channel(channel,title,message)
+                    _delivery_log(conn,row['id'],channel['id'],row['alert_key']+':recovery','SENT')
+                except Exception as exc:
+                    try:
+                        _delivery_log(conn,row['id'],channel['id'],row['alert_key']+':recovery','FAILED',exc)
+                    except Exception:
+                        pass
     finally: conn.close()
 
 def _latest_log_timestamp(cur):
