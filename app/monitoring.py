@@ -7,7 +7,7 @@ from .database import app_db, syslog_db
 from .remote_storage import browse as storage_browse, decrypt_secret
 from .storage_registry import health_check_all
 
-ALERT_KEYS=('storage_capacity','storage_unavailable','storage_health','storage_replication','ingestion_stale','database_unavailable','syslog_listener_down')
+ALERT_KEYS=('storage_capacity','storage_unavailable','storage_health','storage_replication','ingestion_stale','database_unavailable','syslog_listener_down','service_unhealthy')
 
 DEFAULTS={'retention_days':'1825','archive_after_days':'365','storage_warning_percent':'80','storage_critical_percent':'90','ingestion_stale_minutes':'5','alert_repeat_minutes':'60','external_storage_enabled':'0','external_storage_type':'LOCAL','external_storage_path':'/archive/mikrotik'}
 
@@ -198,6 +198,31 @@ def run_checks():
                                        int(os.environ.get('SYSLOG_LISTENER_PORT','5514'))),timeout=2): pass
     except OSError as exc:
         active.append('syslog_listener_down'); _record('syslog_listener_down','CRITICAL','Syslog listener unavailable',str(exc),repeat)
+    # Host watchdog reports container/process state without exposing Docker to the web app.
+    try:
+        ops_file=Path(os.environ.get('OPS_STATUS_FILE','/var/lib/netlog-manager/ops-host/status.tsv'))
+        down=[]; degraded=[]
+        if ops_file.is_file():
+            age=max(0,(datetime.now().timestamp()-ops_file.stat().st_mtime))
+            if age > 90:
+                down.append('ops-agent telemetry stale')
+            for line in ops_file.read_text(encoding='utf-8',errors='replace').splitlines():
+                parts=line.split('\t',3)
+                if len(parts)!=4: continue
+                name,status,stamp,detail=parts
+                if status=='DOWN': down.append(name+': '+detail)
+                elif status=='DEGRADED': degraded.append(name+': '+detail)
+        else:
+            degraded.append('ops-agent telemetry unavailable')
+        if down:
+            active.append('service_unhealthy')
+            _record('service_unhealthy','CRITICAL','Service watchdog detected DOWN component','; '.join(down),repeat)
+        elif degraded:
+            active.append('service_unhealthy')
+            _record('service_unhealthy','WARNING','Service watchdog detected degraded component','; '.join(degraded),repeat)
+    except Exception as exc:
+        active.append('service_unhealthy')
+        _record('service_unhealthy','WARNING','Service watchdog status unavailable',str(exc),repeat)
     _resolve_inactive(active)
     return active
 

@@ -97,6 +97,12 @@ if [[ "$MODE" == docker ]]; then
   if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi
   "${C[@]}" --env-file "$STATE_DIR/docker/.env" build --pull
   "${C[@]}" --env-file "$STATE_DIR/docker/.env" up -d --remove-orphans
+  install -d -o root -g root -m 0750 "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
+  install -m 0755 "$REPO/scripts/ops-agent.sh" /opt/netlog-manager/scripts/ops-agent.sh
+  install -m 0644 "$REPO/systemd/netlog-ops-agent.service" /etc/systemd/system/netlog-ops-agent.service
+  systemctl daemon-reload
+  systemctl enable --now netlog-ops-agent.service
+  systemctl restart netlog-ops-agent.service
 else
   "$REPO/scripts/migrate.sh"
   rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/

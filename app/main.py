@@ -26,6 +26,7 @@ from .remote_storage import browse as storage_browse, integrity_test as storage_
 from .storage_registry import list_targets, get_target, health_check
 from .metrics import collect_dashboard
 from .monitoring import send_channel
+from .operations import service_health, read_live_log, log_sources
 from .explorer import search_nat, ExplorerError
 from .advanced_search import search_logs, AdvancedSearchError
 from .export_search import (
@@ -4352,7 +4353,7 @@ def admin_channel_simple(request: Request, csrf: str=Form(...), name: str=Form(.
     else:
         cfg={"url":webhook_url}
     import json
-    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down"}]
+    events=[x for x in event_types if x in {"storage_capacity","storage_unavailable","storage_health","storage_replication","ingestion_stale","database_unavailable","syslog_listener_down","service_unhealthy"}]
     conn=app_db()
     try:
         with conn.cursor() as cur:
@@ -4393,3 +4394,42 @@ def admin_channel_events(channel_id:int,request:Request,csrf:str=Form(...),event
             cur.execute("UPDATE notification_channels SET event_types_json=%s WHERE id=%s",(json.dumps(selected),channel_id)); conn.commit()
     finally: conn.close()
     return RedirectResponse("/admin/settings?message=Notification+events+updated",status_code=303)
+
+
+@app.get("/admin/operations", response_class=HTMLResponse)
+def admin_operations(request: Request):
+    session = get_session(request)
+    if not is_administrator(session):
+        return RedirectResponse("/login", status_code=303)
+    raw_token = request.cookies.get(COOKIE_NAME)
+    return templates.TemplateResponse(
+        request=request,
+        name="operations.html",
+        context={
+            "session": session,
+            "active_page": "operations",
+            "csrf_token": csrf_token(raw_token),
+            "services": service_health(),
+            "log_sources": log_sources(),
+        },
+    )
+
+
+@app.get("/admin/operations/status")
+def admin_operations_status(request: Request):
+    session = get_session(request)
+    if not is_administrator(session):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return {"services": service_health()}
+
+
+@app.get("/admin/operations/logs")
+def admin_operations_logs(request: Request, limit: int = 200, q: str = "", source: str = "network", severity: str = ""):
+    session = get_session(request)
+    if not is_administrator(session):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    try:
+        lines = read_live_log(limit=limit, query=q, source=source, severity=severity)
+    except ValueError:
+        return JSONResponse({"error": "unknown log source"}, status_code=400)
+    return {"source": source, "severity": severity, "lines": lines}
