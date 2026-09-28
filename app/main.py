@@ -26,7 +26,7 @@ from .remote_storage import browse as storage_browse, integrity_test as storage_
 from .storage_registry import list_targets, get_target, health_check
 from .metrics import collect_dashboard
 from .monitoring import send_channel
-from .operations import service_health, read_live_log
+from .operations import service_health, read_live_log, log_sources
 from .explorer import search_nat, ExplorerError
 from .advanced_search import search_logs, AdvancedSearchError
 from .export_search import (
@@ -4410,6 +4410,7 @@ def admin_operations(request: Request):
             "active_page": "operations",
             "csrf_token": csrf_token(raw_token),
             "services": service_health(),
+            "log_sources": log_sources(),
         },
     )
 
@@ -4423,8 +4424,12 @@ def admin_operations_status(request: Request):
 
 
 @app.get("/admin/operations/logs")
-def admin_operations_logs(request: Request, limit: int = 200, q: str = ""):
+def admin_operations_logs(request: Request, limit: int = 200, q: str = "", source: str = "network", severity: str = ""):
     session = get_session(request)
     if not is_administrator(session):
         return JSONResponse({"error": "forbidden"}, status_code=403)
-    return {"source": "syslog-ng", "lines": read_live_log(limit=limit, query=q)}
+    try:
+        lines = read_live_log(limit=limit, query=q, source=source, severity=severity)
+    except ValueError:
+        return JSONResponse({"error": "unknown log source"}, status_code=400)
+    return {"source": source, "severity": severity, "lines": lines}
