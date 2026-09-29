@@ -14,7 +14,12 @@ COOLDOWN="${NETLOG_OPS_RESTART_COOLDOWN:-300}"
 SERVICES=(db app proxy syslog monitor archive-cache export-worker export-cleanup)
 
 mkdir -p "$LOG_DIR" "$FAIL_DIR" "$COOLDOWN_DIR"
-chmod 0750 "$OPS_DIR" "$LOG_DIR" "$FAIL_DIR" "$COOLDOWN_DIR"
+# Containers run as uid 10001, gid 999.  The web/monitor containers receive
+# this tree read-only, so grant their group traversal/read access without
+# making operational logs world-readable.
+chown root:999 "$OPS_DIR" "$LOG_DIR"
+chmod 0750 "$OPS_DIR" "$LOG_DIR"
+chmod 0700 "$FAIL_DIR" "$COOLDOWN_DIR"
 
 source "$CONFIG_DIR/install.env"
 if docker compose version >/dev/null 2>&1; then C=(docker compose); else C=(docker-compose); fi

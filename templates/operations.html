@@ -5,14 +5,22 @@
   <title>Operations - Network Log Manager</title>
   <link rel="stylesheet" href="/static/css/navbar.css">
   <style>
-    body{font-family:system-ui,sans-serif;margin:0;background:#f5f6f8;color:#1d2430} main{max-width:1400px;margin:24px auto;padding:0 20px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:18px 0}.card{background:white;border:1px solid #dfe3e8;border-radius:10px;padding:14px}
-    .status{font-weight:700}.HEALTHY{color:#18794e}.DEGRADED{color:#9a6700}.DOWN{color:#cf222e}.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
-    input,select,button{padding:8px 10px}#terminal{background:#0d1117;color:#c9d1d9;border-radius:10px;padding:14px;height:520px;overflow:auto;white-space:pre-wrap;font:13px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}
-    .muted{color:#667085;font-size:.9rem}.legend{display:flex;gap:14px;flex-wrap:wrap}.pill{border:1px solid #d0d7de;border-radius:999px;padding:4px 9px;background:#fff}
+    :root{color-scheme:dark}*{box-sizing:border-box}
+    body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#080d18;color:#e5e7eb}
+    main{max-width:1500px;margin:auto;padding:28px}
+    h1,h2{color:#f8fafc}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;margin:18px 0 28px}
+    .card{background:#0f172a;border:1px solid #243044;border-radius:12px;padding:18px}
+    .status{font-weight:700;margin-top:5px}.HEALTHY{color:#4ade80}.DEGRADED{color:#fbbf24}.DOWN{color:#f87171}
+    .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
+    input,select,button{padding:9px 11px;border:1px solid #334155;border-radius:7px;background:#0f172a;color:#e5e7eb;font:inherit}
+    input::placeholder{color:#64748b}button{cursor:pointer}button:hover,select:hover,input:focus{border-color:#475569;background:#172033}
+    #terminal{background:#05080f;color:#cbd5e1;border:1px solid #243044;border-radius:12px;padding:16px;height:520px;overflow:auto;white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .muted{color:#94a3b8;font-size:.9rem}.legend{display:flex;gap:10px;flex-wrap:wrap}.pill{border:1px solid #334155;border-radius:999px;padding:5px 10px;background:#0f172a}
+    @media(max-width:650px){main{padding:16px}#terminal{height:440px}}
   </style>
 </head>
 <body>
+{% set active_page = "operations" %}
 {% include "partials/navbar.html" %}
 <main>
   <h1>Operations / Monitoraggio</h1>
