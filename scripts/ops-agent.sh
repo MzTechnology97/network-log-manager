@@ -73,7 +73,13 @@ while true; do
     IFS="$(printf '\t')" read -r status detail < <(container_state "$service") || true
     [[ -n "${status:-}" ]] || { status="DOWN"; detail="state probe returned no data"; }
     printf '%s\t%s\t%s\t%s\n' "$service" "$status" "$(date +%s)" "$detail" >>"$tmp"
-    "${C[@]}" --env-file "$ENV_FILE" logs --no-color --timestamps --tail=400 "$service" >"$LOG_DIR/$service.log" 2>&1 || true
+    # docker-compose v1 writes an "Attaching to ..." banner that is not a
+    # service log entry. Strip only that wrapper noise; preserve every actual
+    # stdout/stderr line from the container for Operations diagnostics.
+    raw_log="$LOG_DIR/.$service.log.raw"
+    "${C[@]}" --env-file "$ENV_FILE" logs --no-color --timestamps --tail=400 "$service" >"$raw_log" 2>&1 || true
+    sed '/^Attaching to /d' "$raw_log" >"$LOG_DIR/$service.log"
+    rm -f "$raw_log"
     restart_if_needed "$service" "$status"
   done
   mv "$tmp" "$STATUS_FILE"
