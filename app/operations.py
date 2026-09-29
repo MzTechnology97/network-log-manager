@@ -19,7 +19,6 @@ WORKERS = {
 }
 LOG_SOURCES = {
     "network": LIVE_LOG,
-    "ops-agent": OPS_LOG_ROOT / "ops-agent.log",
     "mariadb": OPS_LOG_ROOT / "db.log",
     "app": OPS_LOG_ROOT / "app.log",
     "proxy": OPS_LOG_ROOT / "proxy.log",
