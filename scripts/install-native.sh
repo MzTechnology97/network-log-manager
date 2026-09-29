@@ -24,6 +24,8 @@ mariadb --protocol=socket -uroot -N -e "SELECT @@event_scheduler" | grep -qx 'ON
 id netlog >/dev/null 2>&1 || useradd --system --home /var/lib/netlog-manager --shell /usr/sbin/nologin netlog
 
 install -d -o netlog -g netlog -m 0750 /opt/netlog-manager /var/lib/netlog-manager /var/log/netlog-manager
+install -d -o netlog -g netlog -m 0750 /var/lib/netlog-manager/workers
+install -d -o root -g netlog -m 0750 /var/lib/netlog-manager/ops /var/lib/netlog-manager/ops/logs
 install -d -o netlog -g netlog -m 0750 /var/cache/netlog-manager/history /var/cache/netlog-manager/exports
 install -d -o root -g netlog -m 0750 /etc/netlog-manager
 install -d -o root -g netlog -m 0750 "$ARCHIVE_ROOT"
@@ -61,6 +63,12 @@ SECRET_KEY=$SECRET_KEY
 ARCHIVE_ROOT=$ARCHIVE_ROOT
 EXPORT_ROOT=/var/cache/netlog-manager/exports
 LIVE_LOG=/var/log/network.log
+NETLOG_TIMEZONE=$TZ
+TZ=$TZ
+SYSLOG_LISTENER_HOST=127.0.0.1
+SYSLOG_LISTENER_PORT=$SYSLOG_PORT
+OPS_LOG_ROOT=/var/lib/netlog-manager/ops/logs
+OPS_STATUS_FILE=/var/lib/netlog-manager/ops/status.tsv
 EOF
 chown root:netlog /opt/netlog-manager/config/app.env
 chmod 0640 /opt/netlog-manager/config/app.env
@@ -69,22 +77,29 @@ chmod 0755 /opt/netlog-manager
 chmod 0644 /opt/netlog-manager/app/*.py
 
 log "Installing application systemd units"
-for unit in   netlog-manager.service   netlog-archive-cache.service netlog-archive-cache.timer   netlog-export-worker.service netlog-export-worker.path   netlog-export-cleanup.service netlog-export-cleanup.timer \
+for unit in netlog-manager.service netlog-monitor.service netlog-native-ops-agent.service \
+  netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service \
   netlog-update.service netlog-update.timer
 do
   install -m 0644 "$ROOT/systemd/$unit" "/etc/systemd/system/$unit"
 done
-systemctl daemon-reload
-systemctl enable netlog-manager.service netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer
 install -d -o root -g root -m 0755 /opt/netlog-manager/scripts
 rsync -a --delete "$ROOT/scripts/" /opt/netlog-manager/scripts/
+chmod 0755 /opt/netlog-manager/scripts/native-worker.sh /opt/netlog-manager/scripts/native-ops-agent.sh
+# Remove/disable the legacy timer/path scheduling model. Native workers now
+# stay alive like their Docker counterparts so heartbeat monitoring is truthful.
+systemctl disable --now netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer >/dev/null 2>&1 || true
+systemctl daemon-reload
+systemctl enable netlog-manager.service netlog-monitor.service netlog-native-ops-agent.service \
+  netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service
 # Automatic updates remain disabled until a release channel has been explicitly enabled.
 
 log "Validating application import"
 /opt/netlog-manager/venv/bin/python -m compileall -q /opt/netlog-manager/app /opt/netlog-manager/create-admin.py
 
 systemctl restart netlog-manager.service
-systemctl start netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer
+systemctl restart netlog-monitor.service netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service
+systemctl restart netlog-native-ops-agent.service
 
 log "Persistent archive: $ARCHIVE_ROOT"
 log "Disposable historical cache: /var/cache/netlog-manager/history"
