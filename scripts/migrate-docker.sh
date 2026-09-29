@@ -28,4 +28,8 @@ for f in "$ROOT"/database/migrations/*.sql; do
   db netlog_manager -e "INSERT INTO schema_migrations(version,checksum) VALUES('$version','$checksum');"
 done
 
-db -e "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES; CALL syslogdb.CreateFutureTables();"
+# Existing installations may have created the scheduled event while the
+# maintenance account only had CREATE. Repair both privileges on every update:
+# EVENT is required for an event whose DEFINER is netlog_maintenance, while
+# EXECUTE is required for the event body to call CreateFutureTables().
+db -e "GRANT CREATE, EVENT ON syslogdb.* TO 'netlog_maintenance'@'%'; GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; FLUSH PRIVILEGES; CALL syslogdb.CreateFutureTables();"

@@ -103,7 +103,7 @@ ALTER USER 'netlog_maintenance'@'%' IDENTIFIED BY '$MAINT_PW';
 GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%';
 GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%';
 GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%';
-GRANT CREATE ON syslogdb.* TO 'netlog_maintenance'@'%';
+GRANT CREATE, EVENT ON syslogdb.* TO 'netlog_maintenance'@'%';
 SET GLOBAL event_scheduler=ON;
 FLUSH PRIVILEGES;
 SQL
