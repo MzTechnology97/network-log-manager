@@ -302,7 +302,7 @@ def build_cache(
                     protocol,
                 ) = row
 
-                    seg = segment_name(timestamp)
+                seg = segment_name(timestamp)
 
                 if seg != current_segment:
                     if segment_input is not None:
