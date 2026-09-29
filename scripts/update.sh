@@ -132,6 +132,7 @@ if [[ "$MODE" == docker ]]; then
   systemctl restart netlog-ops-agent.service
 else
   "$REPO/scripts/migrate.sh"
+  source "$CONFIG_DIR/install.env"
   rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
   rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
   install -m 0755 "$REPO/create-admin.py" /opt/netlog-manager/create-admin.py
@@ -140,8 +141,39 @@ else
   for unit in "$REPO"/systemd/*; do [[ -f "$unit" ]] && install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"; done
   install -d -m 0755 /opt/netlog-manager/scripts
   rsync -a --delete "$REPO/scripts/" /opt/netlog-manager/scripts/
+  chmod 0755 /opt/netlog-manager/scripts/native-worker.sh /opt/netlog-manager/scripts/native-ops-agent.sh
+  install -d -o netlog -g netlog -m 0750 "$STATE_DIR/workers"
+  install -d -o root -g netlog -m 0750 "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
+  python3 - /opt/netlog-manager/config/app.env "$TZ" "$SYSLOG_PORT" <<'PY'
+from pathlib import Path
+import sys
+path=Path(sys.argv[1]); tz=sys.argv[2]; port=sys.argv[3]
+wanted={
+    "NETLOG_TIMEZONE":tz, "TZ":tz,
+    "SYSLOG_LISTENER_HOST":"127.0.0.1", "SYSLOG_LISTENER_PORT":port,
+    "OPS_LOG_ROOT":"/var/lib/netlog-manager/ops/logs",
+    "OPS_STATUS_FILE":"/var/lib/netlog-manager/ops/status.tsv",
+}
+lines=path.read_text().splitlines()
+seen=set(); out=[]
+for line in lines:
+    if "=" in line and not line.lstrip().startswith("#"):
+        key=line.split("=",1)[0].strip()
+        if key in wanted:
+            out.append(key+"="+wanted[key]); seen.add(key); continue
+    out.append(line)
+for key,value in wanted.items():
+    if key not in seen: out.append(key+"="+value)
+path.write_text("\n".join(out)+"\n")
+PY
+  chown root:netlog /opt/netlog-manager/config/app.env
+  chmod 0640 /opt/netlog-manager/config/app.env
+  systemctl disable --now netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer >/dev/null 2>&1 || true
   systemctl daemon-reload
-  systemctl restart netlog-manager.service
+  systemctl enable netlog-manager.service netlog-monitor.service netlog-native-ops-agent.service \
+    netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service
+  systemctl restart netlog-manager.service netlog-monitor.service netlog-archive-cache.service \
+    netlog-export-worker.service netlog-export-cleanup.service netlog-native-ops-agent.service
 fi
 
 "$REPO/scripts/healthcheck.sh"
