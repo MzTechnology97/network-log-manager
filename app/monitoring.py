@@ -4,6 +4,7 @@ from email.message import EmailMessage
 from pathlib import Path
 import socket
 from .database import app_db, syslog_db
+from .config import ENV
 from .remote_storage import browse as storage_browse, decrypt_secret
 from .storage_registry import health_check_all
 
@@ -156,7 +157,7 @@ def run_checks():
         active.append('storage_health'); _record('storage_health','CRITICAL','Storage health check failed',str(exc),repeat)
     # Capacity remains a local filesystem check; remote capacity is reported
     # only when the backend can expose it reliably.
-    path=Path(os.environ.get('ARCHIVE_ROOT','/archive/mikrotik'))
+    path=Path(ENV.get('ARCHIVE_ROOT','/archive/mikrotik'))
     try:
         usage=shutil.disk_usage(path); percent=(usage.used/usage.total)*100 if usage.total else 0
         warning=float(s.get('storage_warning_percent','80')); critical=float(s.get('storage_critical_percent','90'))
@@ -194,13 +195,13 @@ def run_checks():
     except Exception as exc:
         active.append('database_unavailable'); _record('database_unavailable','CRITICAL','Database check failed',str(exc),repeat)
     try:
-        with socket.create_connection((os.environ.get('SYSLOG_LISTENER_HOST','syslog'),
-                                       int(os.environ.get('SYSLOG_LISTENER_PORT','5514'))),timeout=2): pass
+        with socket.create_connection((ENV.get('SYSLOG_LISTENER_HOST','syslog'),
+                                       int(ENV.get('SYSLOG_LISTENER_PORT','5514'))),timeout=2): pass
     except OSError as exc:
         active.append('syslog_listener_down'); _record('syslog_listener_down','CRITICAL','Syslog listener unavailable',str(exc),repeat)
     # Host watchdog reports container/process state without exposing Docker to the web app.
     try:
-        ops_file=Path(os.environ.get('OPS_STATUS_FILE','/var/lib/netlog-manager/ops-host/status.tsv'))
+        ops_file=Path(ENV.get('OPS_STATUS_FILE','/var/lib/netlog-manager/ops-host/status.tsv'))
         down=[]; degraded=[]
         if ops_file.is_file():
             age=max(0,(datetime.now().timestamp()-ops_file.stat().st_mtime))
