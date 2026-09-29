@@ -38,6 +38,20 @@
 
     </nav>
 
+    <div class="nlm-user-tools">
+    {% if "Administrator" in session.roles %}
+    <details class="nlm-alert-menu">
+        <summary aria-label="Alert attivi" title="Alert attivi">
+            <span class="nlm-bell" aria-hidden="true">♢</span>
+            <span id="nlm-alert-badge" class="nlm-alert-badge" hidden>0</span>
+        </summary>
+        <div class="nlm-alert-dropdown">
+            <div class="nlm-alert-heading"><strong>Alert attivi</strong><span id="nlm-alert-count">0</span></div>
+            <div id="nlm-alert-list" class="nlm-alert-list"><div class="nlm-alert-empty">Caricamento…</div></div>
+        </div>
+    </details>
+    {% endif %}
+
     <details class="nlm-account-menu">
 
         <summary>
@@ -107,5 +121,25 @@
         </div>
 
     </details>
+    </div>
 
 </header>
+
+{% if "Administrator" in session.roles %}
+<script>
+(function(){
+ const badge=document.getElementById('nlm-alert-badge'), count=document.getElementById('nlm-alert-count'), list=document.getElementById('nlm-alert-list');
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ async function loadAlerts(){
+  try{
+   const r=await fetch('/api/alerts/active',{cache:'no-store',credentials:'same-origin'});
+   if(!r.ok) return;
+   const d=await r.json(), n=Number(d.count||0);
+   count.textContent=n; badge.textContent=n>99?'99+':n; badge.hidden=n===0;
+   list.innerHTML=n ? d.alerts.map(a=>'<div class="nlm-alert-item"><div class="nlm-alert-meta"><span class="nlm-alert-severity '+esc(String(a.severity).toLowerCase())+'">'+esc(a.severity)+'</span><span>'+esc(a.last_seen_at||'')+'</span></div><strong>'+esc(a.title)+'</strong><div class="nlm-alert-message">'+esc(a.message||'')+'</div></div>').join('') : '<div class="nlm-alert-empty">Nessun alert attivo ✓</div>';
+  }catch(e){}
+ }
+ loadAlerts(); setInterval(loadAlerts,15000);
+})();
+</script>
+{% endif %}

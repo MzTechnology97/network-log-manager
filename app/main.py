@@ -4140,6 +4140,39 @@ def account_security_disable(
 
 
 
+@app.get("/api/alerts/active")
+def active_alerts_api(request: Request):
+    session = get_session(request)
+    if not session:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not is_administrator(session):
+        return JSONResponse({"alerts": [], "count": 0})
+    conn = app_db()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, alert_key, severity, title, message, first_seen_at, last_seen_at
+                FROM system_alerts
+                WHERE resolved_at IS NULL
+                ORDER BY
+                    CASE severity
+                        WHEN 'CRITICAL' THEN 1
+                        WHEN 'ERROR' THEN 2
+                        WHEN 'WARNING' THEN 3
+                        ELSE 4
+                    END,
+                    last_seen_at DESC
+                LIMIT 50
+            """)
+            alerts = cur.fetchall()
+    finally:
+        conn.close()
+    return JSONResponse({
+        "count": len(alerts),
+        "alerts": jsonable_encoder(alerts),
+    })
+
+
 @app.get("/admin/settings", response_class=HTMLResponse)
 def admin_settings_page(request: Request):
     session=get_session(request)
