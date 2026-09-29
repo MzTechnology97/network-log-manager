@@ -1,0 +1,24 @@
+[Unit]
+Description=Network Log Manager monitoring and alert worker
+After=mariadb.service syslog-ng.service
+Wants=mariadb.service syslog-ng.service
+
+[Service]
+Type=simple
+User=netlog
+Group=netlog
+WorkingDirectory=/opt/netlog-manager
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/netlog-manager/scripts/native-worker.sh monitor
+Restart=always
+RestartSec=10
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/netlog-manager
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
