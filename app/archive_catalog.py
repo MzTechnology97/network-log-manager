@@ -4,6 +4,7 @@ import argparse
 import re
 from datetime import datetime
 from pathlib import Path
+import subprocess
 
 from .config import ENV
 from .database import app_db
@@ -14,6 +15,27 @@ TABLE_RE = re.compile(
 )
 
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
+def detect_schema(archive_path: Path):
+    """Detect supported mysqldump row layouts from the CREATE TABLE header."""
+    try:
+        proc = subprocess.run(
+            ["/usr/bin/zstd", "-dc", "--", str(archive_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10, check=True,
+        )
+    except Exception:
+        return None, False
+    text = proc.stdout
+    # Current syslog tables contain NAT source columns. Older archives used
+    # the six-field legacy layout consumed by archive_search.
+    has_nat = "nat_source_ip" in text and "nat_source_port" in text
+    if has_nat:
+        return "nat-v1", True
+    if all(name in text for name in ("source_ip", "source_port", "dest_ip", "dest_port", "protocol")):
+        return "legacy", False
+    return None, False
 
 
 def parse_meta(path: Path) -> dict:
@@ -242,6 +264,8 @@ def scan_archive(root: Path):
             else:
                 status = "INVALID"
 
+            schema_generation, has_nat = detect_schema(archive_path) if archive_path.is_file() else (None, False)
+
             records.append({
                 "log_date": filename_date,
                 "table_name": table_name,
@@ -268,6 +292,8 @@ def scan_archive(root: Path):
                 "archived_at": archived_at,
                 "retention_days": retention_days,
                 "archive_status": status,
+                "schema_generation": schema_generation,
+                "has_nat": has_nat,
                 "problems": problems,
             })
 
@@ -304,8 +330,8 @@ def write_catalog(records):
             %(sha256)s,
             %(archived_at)s,
             %(retention_days)s,
-            NULL,
-            0,
+            %(schema_generation)s,
+            %(has_nat)s,
             %(archive_status)s,
             NULL,
             NOW()
@@ -327,6 +353,10 @@ def write_catalog(records):
                 VALUES(archived_at),
             retention_days =
                 VALUES(retention_days),
+            schema_generation =
+                VALUES(schema_generation),
+            has_nat =
+                VALUES(has_nat),
             archive_status =
                 VALUES(archive_status),
             last_scanned_at =
