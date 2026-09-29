@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Network Log Manager native archive retention cleanup
+
+[Timer]
+OnCalendar=*-*-* 04:45:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=netlog-native-retention.service
+
+[Install]
+WantedBy=timers.target
