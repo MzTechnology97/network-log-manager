@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -46,49 +48,53 @@ def get_archive(log_date: str):
         conn.close()
 
 
-def parse_tuple_line(line: str):
+def parse_tuple_rows(line: str):
+    """Return normalized rows from legacy and nat-v1 mysqldump INSERT lines.
+
+    Supported layouts:
+      legacy: timestamp, source_ip, source_port, dest_ip, dest_port, protocol
+      nat-v1: id, timestamp, source_ip, source_port, dest_ip, dest_port,
+              protocol, nat_source_ip, nat_source_port
+
+    mysqldump may emit one or many tuples on the same INSERT line.
     """
-    Parser specializzato per il formato legacy reale:
-
-    ('timestamp','source_ip','source_port',
-     'dest_ip','dest_port','protocol'),
-
-    I campi di questi log sono valori semplici:
-    timestamp, IPv4, porte e protocollo numerico.
-    """
-
     line = line.strip()
+    if not line or "INSERT INTO" not in line and not line.startswith("("):
+        return []
 
-    if not line.startswith("('"):
-        return None
+    if " VALUES " in line:
+        line = line.split(" VALUES ", 1)[1]
 
-    # Rimuove:
-    # (
-    # ),
-    # );
-    if line.endswith("),"):
-        payload = line[1:-2]
-    elif line.endswith(");"):
-        payload = line[1:-2]
-    else:
-        return None
+    tuples = re.findall(r"\(([^()]*)\)", line)
+    rows = []
+    for payload in tuples:
+        try:
+            parts = next(csv.reader(
+                [payload],
+                delimiter=",",
+                quotechar="'",
+                escapechar="\\",
+                strict=True,
+            ))
+        except (csv.Error, StopIteration):
+            continue
 
-    parts = payload.split("','")
+        parts = [None if value == "NULL" else value for value in parts]
 
-    if len(parts) not in (6, 9):
-        return None
+        if len(parts) == 6:
+            ts, src, sport, dst, dport, proto = parts
+            rows.append((ts, src, sport, None, None, dst, dport, proto))
+        elif len(parts) == 9:
+            _id, ts, src, sport, dst, dport, proto, nat_ip, nat_port = parts
+            rows.append((ts, src, sport, nat_ip, nat_port, dst, dport, proto))
 
-    # Primo e ultimo apice.
-    parts[0] = parts[0][1:]
+    return rows
 
-    if parts[-1].endswith("'"):
-        parts[-1] = parts[-1][:-1]
 
-    if len(parts) not in (6, 9):
-        return None
-
-    return parts
-
+def parse_tuple_line(line: str):
+    """Backward-compatible single-row wrapper."""
+    rows = parse_tuple_rows(line)
+    return rows[0] if rows else None
 
 def normalize_protocol(value: str):
     return PROTO_MAP.get(value, value.upper())
@@ -159,81 +165,79 @@ def search_archive(
         assert proc.stdout is not None
 
         for line in proc.stdout:
-            row = parse_tuple_line(line)
+            for row in parse_tuple_rows(line):
+                parsed_rows += 1
 
-            if row is None:
-                continue
+                (
+                    ts_raw,
+                    src_ip,
+                    src_port_raw,
+                    nat_src_ip,
+                    nat_src_port_raw,
+                    dst_ip,
+                    dst_port_raw,
+                    proto_raw,
+                ) = row
 
-            parsed_rows += 1
-
-            (
-                ts_raw,
-                src_ip,
-                src_port_raw,
-                dst_ip,
-                dst_port_raw,
-                proto_raw,
-            ) = row
-
-            # Confronto diretto dei timestamp ISO 8601.
-            # Evita una conversione datetime per ogni record.
-            if ts_raw < start_key:
-                continue
-
-            if ts_raw > end_key:
-                stopped_by_time = True
-                break
-
-            rows_in_window += 1
-
-            if source_ip is not None:
-                if src_ip != source_ip:
+                # Confronto diretto dei timestamp ISO 8601.
+                # Evita una conversione datetime per ogni record.
+                if ts_raw < start_key:
                     continue
 
-            if source_port is not None:
-                try:
-                    if int(src_port_raw) != source_port:
+                if ts_raw > end_key:
+                    stopped_by_time = True
+                    break
+
+                rows_in_window += 1
+
+                if source_ip is not None:
+                    if src_ip != source_ip:
                         continue
-                except ValueError:
-                    continue
 
-            if dest_ip is not None:
-                if dst_ip != dest_ip:
-                    continue
-
-            if dest_port is not None:
-                try:
-                    if int(dst_port_raw) != dest_port:
+                if source_port is not None:
+                    try:
+                        if int(src_port_raw) != source_port:
+                            continue
+                    except ValueError:
                         continue
-                except ValueError:
-                    continue
 
-            proto = normalize_protocol(proto_raw)
+                if dest_ip is not None:
+                    if dst_ip != dest_ip:
+                        continue
 
-            if protocol is not None:
-                if proto != protocol:
-                    continue
+                if dest_port is not None:
+                    try:
+                        if int(dst_port_raw) != dest_port:
+                            continue
+                    except ValueError:
+                        continue
 
-            matched += 1
+                proto = normalize_protocol(proto_raw)
 
-            if len(results) < limit:
-                results.append({
-                    "timestamp": ts_raw,
-                    "source_ip": src_ip,
-                    "source_port": int(src_port_raw),
-                    "nat_source_ip": None,
-                    "nat_source_port": None,
-                    "dest_ip": dst_ip,
-                    "dest_port": int(dst_port_raw),
-                    "protocol": proto,
-                    "storage": "archive",
-                })
-            else:
-                # Abbiamo trovato il risultato limit+1:
-                # sappiamo con certezza che l'output
-                # è troncato.
-                truncated = True
-                break
+                if protocol is not None:
+                    if proto != protocol:
+                        continue
+
+                matched += 1
+
+                if len(results) < limit:
+                    results.append({
+                        "timestamp": ts_raw,
+                        "source_ip": src_ip,
+                        "source_port": int(src_port_raw),
+                        "nat_source_ip": None,
+                        "nat_source_port": None,
+                        "dest_ip": dst_ip,
+                        "dest_port": int(dst_port_raw),
+                        "protocol": proto,
+                        "storage": "archive",
+                    })
+                else:
+                    # Abbiamo trovato il risultato limit+1:
+                    # sappiamo con certezza che l'output
+                    # è troncato.
+                    truncated = True
+                    break
 
     finally:
         if proc.stdout is not None:
@@ -300,9 +304,9 @@ def main():
             f"{archive['archive_status']}"
         )
 
-    if archive["schema_generation"] != "legacy":
+    if archive["schema_generation"] not in ("legacy", "nat-v1"):
         raise SystemExit(
-            "Schema non supportato dal parser legacy: "
+            Schema archivio non supportato: "
             f"{archive['schema_generation']}"
         )
 
