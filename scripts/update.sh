@@ -182,6 +182,7 @@ PY
     netlog-native-archive.timer netlog-native-retention.timer
   systemctl restart netlog-manager.service netlog-monitor.service netlog-archive-cache.service \
     netlog-export-worker.service netlog-export-cleanup.service netlog-native-ops-agent.service
+  systemctl restart netlog-native-archive.timer netlog-native-retention.timer
 fi
 
 "$REPO/scripts/healthcheck.sh"
