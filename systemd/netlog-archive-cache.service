@@ -1,16 +1,17 @@
 [Unit]
-Description=Network Log Manager - Historical Search Cache Builder
+Description=Network Log Manager - Historical Search Cache Worker
 After=mariadb.service
 Wants=mariadb.service
 
 [Service]
-Type=oneshot
+Type=simple
 User=netlog
 Group=netlog
 WorkingDirectory=/opt/netlog-manager
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStartPre=/opt/netlog-manager/venv/bin/python -m app.archive_catalog --write
-ExecStart=/opt/netlog-manager/venv/bin/python -m app.archive_cache_worker --limit 25
+ExecStart=/opt/netlog-manager/scripts/native-worker.sh archive-cache
+Restart=always
+RestartSec=10
 Nice=15
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
@@ -18,6 +19,9 @@ PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/var/cache/netlog-manager
+ReadWritePaths=/var/cache/netlog-manager /var/lib/netlog-manager
 StandardOutput=journal
 StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
