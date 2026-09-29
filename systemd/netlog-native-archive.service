@@ -1,0 +1,8 @@
+[Unit]
+Description=Network Log Manager native archive job
+After=mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/netlog-manager/scripts/archive-native.sh --limit 10
