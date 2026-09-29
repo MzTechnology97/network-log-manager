@@ -92,6 +92,10 @@ if [[ "$MODE" == docker ]]; then
   sanitize_compose_environment
   backup_path="$("$REPO/scripts/backup-docker.sh" | tail -n1)"
 else
+  source "$CONFIG_DIR/install.env"
+  # Native app/monitor workers run as netlog and must be able to perform
+  # storage integrity probes and archive writes at the configured root.
+  install -d -o netlog -g netlog -m 0750 "$ARCHIVE_ROOT"
   backup_path="$("$REPO/scripts/backup.sh" | tail -n1)"
 fi
 log "Pre-update backup: $backup_path"
