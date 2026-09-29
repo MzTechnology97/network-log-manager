@@ -93,6 +93,8 @@ if [[ "$MODE" == docker ]]; then
   backup_path="$("$REPO/scripts/backup-docker.sh" | tail -n1)"
 else
   source "$CONFIG_DIR/install.env"
+  # Keep the host timezone aligned with the installation setting before restarting native workers.
+  if command_exists timedatectl; then timedatectl set-timezone "$TZ"; fi
   # Native app/monitor workers run as netlog and must be able to perform
   # storage integrity probes and archive writes at the configured root.
   install -d -o netlog -g netlog -m 0750 "$ARCHIVE_ROOT"
@@ -183,9 +185,21 @@ PY
   systemctl restart netlog-manager.service netlog-monitor.service netlog-archive-cache.service \
     netlog-export-worker.service netlog-export-cleanup.service netlog-native-ops-agent.service
   systemctl restart netlog-native-archive.timer netlog-native-retention.timer
+  # Re-render syslog-ng because updates may change its template. Validate before reload.
+  "$REPO/scripts/render-syslog-ng.sh"
 fi
 
-"$REPO/scripts/healthcheck.sh"
+# Native services can need a moment after restart; avoid false rollback on the first refused connection.
+if [[ "$MODE" == native ]]; then
+  health_ok=0
+  for _ in {1..20}; do
+    if "$REPO/scripts/healthcheck.sh" >/dev/null 2>&1; then health_ok=1; break; fi
+    sleep 1
+  done
+  (( health_ok == 1 )) || "$REPO/scripts/healthcheck.sh"
+else
+  "$REPO/scripts/healthcheck.sh"
+fi
 printf '%s\n' "$target_commit" >"$STATE_DIR/current-revision"
 chmod 0600 "$STATE_DIR/current-revision"
 trap - EXIT
