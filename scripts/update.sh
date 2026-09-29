@@ -92,6 +92,10 @@ if [[ "$MODE" == docker ]]; then
   sanitize_compose_environment
   backup_path="$("$REPO/scripts/backup-docker.sh" | tail -n1)"
 else
+  source "$CONFIG_DIR/install.env"
+  # Native app/monitor workers run as netlog and must be able to perform
+  # storage integrity probes and archive writes at the configured root.
+  install -d -o netlog -g netlog -m 0750 "$ARCHIVE_ROOT"
   backup_path="$("$REPO/scripts/backup.sh" | tail -n1)"
 fi
 log "Pre-update backup: $backup_path"
@@ -108,6 +112,7 @@ rollback(){
   else
     rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
     rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
+    rsync -a --delete "$REPO/static/" /opt/netlog-manager/static/
     systemctl restart netlog-manager.service
   fi
 }
@@ -132,16 +137,52 @@ if [[ "$MODE" == docker ]]; then
   systemctl restart netlog-ops-agent.service
 else
   "$REPO/scripts/migrate.sh"
+  source "$CONFIG_DIR/install.env"
   rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
   rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
+  rsync -a --delete "$REPO/static/" /opt/netlog-manager/static/
   install -m 0755 "$REPO/create-admin.py" /opt/netlog-manager/create-admin.py
   install -m 0644 "$REPO/requirements.txt" /opt/netlog-manager/requirements.txt
   /opt/netlog-manager/venv/bin/pip install --disable-pip-version-check -r /opt/netlog-manager/requirements.txt
   for unit in "$REPO"/systemd/*; do [[ -f "$unit" ]] && install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"; done
   install -d -m 0755 /opt/netlog-manager/scripts
   rsync -a --delete "$REPO/scripts/" /opt/netlog-manager/scripts/
+  chmod 0755 /opt/netlog-manager/scripts/native-worker.sh /opt/netlog-manager/scripts/native-ops-agent.sh /opt/netlog-manager/scripts/archive-native.sh /opt/netlog-manager/scripts/retention-native.sh
+  install -m 0644 "$REPO/logrotate/netlog-manager" /etc/logrotate.d/netlog-manager
+  install -d -o netlog -g netlog -m 0750 "$STATE_DIR/workers"
+  install -d -o root -g netlog -m 0750 "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
+  python3 - /opt/netlog-manager/config/app.env "$TZ" "$SYSLOG_PORT" <<'PY'
+from pathlib import Path
+import sys
+path=Path(sys.argv[1]); tz=sys.argv[2]; port=sys.argv[3]
+wanted={
+    "NETLOG_TIMEZONE":tz, "TZ":tz,
+    "SYSLOG_LISTENER_HOST":"127.0.0.1", "SYSLOG_LISTENER_PORT":port,
+    "OPS_LOG_ROOT":"/var/lib/netlog-manager/ops/logs",
+    "OPS_STATUS_FILE":"/var/lib/netlog-manager/ops/status.tsv",
+}
+lines=path.read_text().splitlines()
+seen=set(); out=[]
+for line in lines:
+    if "=" in line and not line.lstrip().startswith("#"):
+        key=line.split("=",1)[0].strip()
+        if key in wanted:
+            out.append(key+"="+wanted[key]); seen.add(key); continue
+    out.append(line)
+for key,value in wanted.items():
+    if key not in seen: out.append(key+"="+value)
+path.write_text("\n".join(out)+"\n")
+PY
+  chown root:netlog /opt/netlog-manager/config/app.env
+  chmod 0640 /opt/netlog-manager/config/app.env
+  systemctl disable --now netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer >/dev/null 2>&1 || true
   systemctl daemon-reload
-  systemctl restart netlog-manager.service
+  systemctl enable netlog-manager.service netlog-monitor.service netlog-native-ops-agent.service \
+    netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service \
+    netlog-native-archive.timer netlog-native-retention.timer
+  systemctl restart netlog-manager.service netlog-monitor.service netlog-archive-cache.service \
+    netlog-export-worker.service netlog-export-cleanup.service netlog-native-ops-agent.service
+  systemctl restart netlog-native-archive.timer netlog-native-retention.timer
 fi
 
 "$REPO/scripts/healthcheck.sh"

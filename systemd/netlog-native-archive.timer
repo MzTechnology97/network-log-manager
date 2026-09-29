@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Network Log Manager native archive job daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=netlog-native-archive.service
+
+[Install]
+WantedBy=timers.target

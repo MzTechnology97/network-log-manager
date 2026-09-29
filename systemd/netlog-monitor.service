@@ -1,7 +1,7 @@
 [Unit]
-Description=Network Log Manager - Historical Search Cache Worker
-After=mariadb.service
-Wants=mariadb.service
+Description=Network Log Manager monitoring and alert worker
+After=mariadb.service syslog-ng.service
+Wants=mariadb.service syslog-ng.service
 
 [Service]
 Type=simple
@@ -9,17 +9,14 @@ User=netlog
 Group=netlog
 WorkingDirectory=/opt/netlog-manager
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/opt/netlog-manager/scripts/native-worker.sh archive-cache
+ExecStart=/opt/netlog-manager/scripts/native-worker.sh monitor
 Restart=always
 RestartSec=10
-Nice=15
-IOSchedulingClass=best-effort
-IOSchedulingPriority=7
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/var/cache/netlog-manager /var/lib/netlog-manager
+ReadWritePaths=/var/lib/netlog-manager
 StandardOutput=journal
 StandardError=journal
 

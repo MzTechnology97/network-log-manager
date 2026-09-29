@@ -26,6 +26,12 @@ else
   systemctl is-active --quiet syslog-ng
   systemctl is-active --quiet netlog-manager
   systemctl is-active --quiet apache2
-  curl -fsS --max-time 10 http://127.0.0.1:8080/ >/dev/null
+  systemctl is-active --quiet netlog-monitor
+  systemctl is-active --quiet netlog-archive-cache
+  systemctl is-active --quiet netlog-export-worker
+  systemctl is-active --quiet netlog-export-cleanup
+  systemctl is-active --quiet netlog-native-ops-agent
+  curl -fsS --max-time 10 http://127.0.0.1:8080/health >/dev/null
+  [[ -s "$STATE_DIR/ops/status.tsv" ]] || die "Native Operations telemetry is missing."
 fi
 printf 'OK\n'
