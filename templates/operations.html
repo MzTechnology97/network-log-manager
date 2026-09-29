@@ -14,7 +14,8 @@
     .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0}
     input,select,button{padding:9px 11px;border:1px solid #334155;border-radius:7px;background:#0f172a;color:#e5e7eb;font:inherit}
     input::placeholder{color:#64748b}button{cursor:pointer}button:hover,select:hover,input:focus{border-color:#475569;background:#172033}
-    #terminal{background:#05080f;color:#cbd5e1;border:1px solid #243044;border-radius:12px;padding:16px;height:520px;overflow:auto;white-space:pre-wrap;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace}
+    #terminal{background:#05080f;color:#cbd5e1;border:1px solid #243044;border-radius:12px;padding:16px;height:520px;overflow:auto;white-space:pre;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;user-select:text;cursor:text;tab-size:4}
+    #terminal:focus{outline:2px solid #475569;outline-offset:2px}.copy-ok{color:#4ade80;border-color:#166534}
     .muted{color:#94a3b8;font-size:.9rem}.legend{display:flex;gap:10px;flex-wrap:wrap}.pill{border:1px solid #334155;border-radius:999px;padding:5px 10px;background:#0f172a}
     @media(max-width:650px){main{padding:16px}#terminal{height:440px}}
   </style>
@@ -31,15 +32,20 @@
   <div class="toolbar">
     <select id="source">{% for src in log_sources %}<option value="{{ src.id }}">{{ src.label }}{% if not src.available %} (in attesa){% endif %}</option>{% endfor %}</select>
     <select id="severity"><option value="">Tutti i livelli</option><option>DEBUG</option><option>INFO</option><option>WARNING</option><option>ERROR</option><option>CRITICAL</option></select>
-    <input id="query" placeholder="Cerca nel log"><button id="pause">Pausa</button><label><input type="checkbox" id="scroll" checked> autoscroll</label>
+    <input id="query" placeholder="Cerca nel log"><button id="pause">Pausa</button><button id="copy" type="button" title="Copia tutte le righe visualizzate">Copia log</button><button id="select-all" type="button" title="Seleziona tutto il contenuto del terminale">Seleziona tutto</button><label><input type="checkbox" id="scroll" checked> autoscroll</label>
   </div>
-  <div id="terminal">Caricamento…</div>
+  <div id="terminal" tabindex="0" aria-label="Console log realtime">Caricamento…</div>
 </main>
 <script>
 let paused=false; const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 async function refreshStatus(){const r=await fetch('/admin/operations/status');if(!r.ok)return;const d=await r.json();document.getElementById('services').innerHTML=d.services.map(s=>'<div class="card"><strong>'+esc(s.name)+'</strong><div class="status '+esc(s.status)+'">'+esc(s.status)+'</div><div class="muted">'+esc(s.detail)+'</div></div>').join('')}
 async function refreshLogs(){if(paused)return;const source=document.getElementById('source').value,q=document.getElementById('query').value,sev=document.getElementById('severity').value;const u='/admin/operations/logs?limit=400&source='+encodeURIComponent(source)+'&severity='+encodeURIComponent(sev)+'&q='+encodeURIComponent(q);const r=await fetch(u);if(!r.ok)return;const d=await r.json(),t=document.getElementById('terminal');t.textContent=d.lines.join('\n')||'(nessuna riga corrispondente)';if(document.getElementById('scroll').checked)t.scrollTop=t.scrollHeight}
-document.getElementById('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Riprendi':'Pausa'};document.getElementById('source').onchange=refreshLogs;document.getElementById('severity').onchange=refreshLogs;document.getElementById('query').oninput=refreshLogs;
+const terminal=document.getElementById('terminal');
+document.getElementById('pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Riprendi':'Pausa'};
+document.getElementById('copy').onclick=async e=>{try{await navigator.clipboard.writeText(terminal.textContent);const old=e.target.textContent;e.target.textContent='Copiato ✓';e.target.classList.add('copy-ok');setTimeout(()=>{e.target.textContent=old;e.target.classList.remove('copy-ok')},1200)}catch(_){const range=document.createRange();range.selectNodeContents(terminal);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range)}};
+document.getElementById('select-all').onclick=()=>{const range=document.createRange();range.selectNodeContents(terminal);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);terminal.focus()};
+terminal.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();document.getElementById('select-all').click()}});
+document.getElementById('source').onchange=refreshLogs;document.getElementById('severity').onchange=refreshLogs;document.getElementById('query').oninput=refreshLogs;
 setInterval(refreshStatus,5000);setInterval(refreshLogs,3000);refreshStatus();refreshLogs();
 </script>
 </body></html>
