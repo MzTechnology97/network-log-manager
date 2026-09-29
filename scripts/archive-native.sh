@@ -64,9 +64,9 @@ EOF
   # If a GUI-configured remote storage is active and verified, copy all
   # archive artifacts before the source DB table can be dropped.
   if ! {
-    runuser -u netlog -- /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$final")" --relative "$y/$m/$(basename "$final")" --sha256 "$hash" &&
-    runuser -u netlog -- /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$meta")" --relative "$y/$m/$(basename "$meta")" &&
-    runuser -u netlog -- /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$sha")" --relative "$y/$m/$(basename "$sha")";
+    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$final")" --relative "$y/$m/$(basename "$final")" --sha256 "$hash" &&
+    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$meta")" --relative "$y/$m/$(basename "$meta")" &&
+    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$sha")" --relative "$y/$m/$(basename "$sha")";
   }; then
     rm -f "$final" "$meta" "$sha"
     die "Remote archive replication failed for $table; source table preserved and local partial archive reset."
