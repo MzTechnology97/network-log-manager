@@ -90,7 +90,18 @@ def service_health():
             stamp = int(path.read_text().strip())
             age = max(0, int(now - stamp))
             status = "HEALTHY" if age <= maximum_age else ("DEGRADED" if age <= maximum_age * 2 else "DOWN")
-            out.append(_state(worker, status, f"heartbeat {age}s ago"))
+            detail = f"heartbeat {age}s ago"
+            # A fresh heartbeat alone does not prove the service is currently
+            # healthy. Merge host-watchdog telemetry so a stopped/restarted
+            # worker is visible in Operations even while its last heartbeat
+            # is still within the freshness window.
+            host_state = agent.get(worker)
+            if host_state:
+                rank = {"HEALTHY": 0, "DEGRADED": 1, "DOWN": 2}
+                if rank.get(host_state["status"], 2) > rank.get(status, 2):
+                    status = host_state["status"]
+                    detail = host_state["detail"]
+            out.append(_state(worker, status, detail))
         except Exception as exc:
             out.append(_state(worker, "DOWN", f"heartbeat unavailable: {exc}"[:240]))
 
