@@ -42,6 +42,7 @@ log "Rendering syslog-ng configuration"
 log "Deploying application source"
 rsync -a --delete "$ROOT/app/" /opt/netlog-manager/app/
 rsync -a --delete "$ROOT/templates/" /opt/netlog-manager/templates/
+rsync -a --delete "$ROOT/static/" /opt/netlog-manager/static/
 install -m 0755 "$ROOT/create-admin.py" /opt/netlog-manager/create-admin.py
 install -m 0644 "$ROOT/requirements.txt" /opt/netlog-manager/requirements.txt
 
@@ -72,7 +73,7 @@ OPS_STATUS_FILE=/var/lib/netlog-manager/ops/status.tsv
 EOF
 chown root:netlog /opt/netlog-manager/config/app.env
 chmod 0640 /opt/netlog-manager/config/app.env
-chown -R root:root /opt/netlog-manager/app /opt/netlog-manager/templates /opt/netlog-manager/create-admin.py /opt/netlog-manager/requirements.txt
+chown -R root:root /opt/netlog-manager/app /opt/netlog-manager/templates /opt/netlog-manager/static /opt/netlog-manager/create-admin.py /opt/netlog-manager/requirements.txt
 chmod 0755 /opt/netlog-manager
 chmod 0644 /opt/netlog-manager/app/*.py
 
