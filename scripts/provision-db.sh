@@ -28,6 +28,6 @@ ALTER USER 'netlog_maintenance'@'%' IDENTIFIED BY '$MAINT_PW';
 GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'localhost';
 GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'localhost';
 GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'localhost';
-GRANT CREATE ON syslogdb.* TO 'netlog_maintenance'@'%';
+GRANT CREATE, EVENT ON syslogdb.* TO 'netlog_maintenance'@'%';
 FLUSH PRIVILEGES;
 SQL
