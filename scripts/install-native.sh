@@ -28,7 +28,7 @@ install -d -o netlog -g netlog -m 0750 /var/lib/netlog-manager/workers
 install -d -o root -g netlog -m 0750 /var/lib/netlog-manager/ops /var/lib/netlog-manager/ops/logs
 install -d -o netlog -g netlog -m 0750 /var/cache/netlog-manager/history /var/cache/netlog-manager/exports
 install -d -o root -g netlog -m 0750 /etc/netlog-manager
-install -d -o root -g netlog -m 0750 "$ARCHIVE_ROOT"
+install -d -o netlog -g netlog -m 0750 "$ARCHIVE_ROOT"
 
 log "Provisioning least-privilege database accounts"
 "$ROOT/scripts/provision-db.sh"
