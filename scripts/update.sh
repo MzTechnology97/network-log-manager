@@ -13,6 +13,19 @@ sanitize_compose_environment() {
   unset SYSLOG_PORT ARCHIVE_ROOT TZ HOSTNAME_FQDN TLS_DIR
 }
 load_install_state
+
+# update.sh is also installed outside the Git checkout under /opt. Existing
+# deployments can therefore execute an older updater even after origin/main has
+# moved forward. Re-exec the updater from the configured repository once per
+# invocation so deployment/bootstrap logic always comes from the fetched tree.
+if [[ "${NETLOG_UPDATER_REEXEC:-0}" != "1" ]]; then
+  REPO="${REPO_ROOT:?REPO_ROOT is not configured}"
+  if [[ -x "$REPO/scripts/update.sh" && "$(readlink -f "$0")" != "$(readlink -f "$REPO/scripts/update.sh")" ]]; then
+    export NETLOG_UPDATER_REEXEC=1
+    exec "$REPO/scripts/update.sh" "$@"
+  fi
+fi
+
 if [[ "${AUTO_UPDATE:-0}" != "1" && "${1:-}" == "--automatic" ]]; then
   log "Automatic updates are disabled."
   exit 0
