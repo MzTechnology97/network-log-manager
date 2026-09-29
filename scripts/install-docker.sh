@@ -23,7 +23,8 @@ else
   die "Docker Compose is unavailable."
 fi
 
-install -d -o root -g root -m 0750 "$STATE_DIR/docker" "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
+install -d -o root -g root -m 0750 "$STATE_DIR/docker"
+install -d -o root -g 999 -m 0750 "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
 # The application and monitor containers run as UID/GID 10001 and perform\n# storage integrity probes (write/read/hash/delete) on the local archive.\ninstall -d -o 10001 -g 999 -m 0750 "$ARCHIVE_ROOT"
 install -d -o root -g root -m 0750 "$STATE_DIR/docker/config" "$STATE_DIR/docker/tls"
 
