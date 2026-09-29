@@ -19,8 +19,8 @@ DRY_RUN=0
 if [[ "${1:-}" == "--limit" ]]; then [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "Invalid --limit"; LIMIT="$2"; fi
 db(){ "${MYSQL_ROOT[@]}" "$@"; }
 dump(){ "${MYSQLDUMP_ROOT[@]}" "$@"; }
-command -v zstd >/dev/null || die "zstd is required on the Docker host."
-command -v flock >/dev/null || die "flock is required on the Docker host."
+command -v zstd >/dev/null || die "zstd is required on the native host."
+command -v flock >/dev/null || die "flock is required on the native host."
 exec 9>"$STATE_DIR/archive.lock"
 flock -n 9 || die "Another native archive job is running."
 archive_after_days="$(db -N -B netlog_manager -e "SELECT COALESCE((SELECT setting_value FROM settings WHERE setting_key='archive_after_days' LIMIT 1),'365');" 2>/dev/null || echo 365)"
@@ -60,19 +60,19 @@ ARCHIVED_AT=$(date --iso-8601=seconds)
 RETENTION_POLICY=archive_after_${archive_after_days}_days
 EOF
   printf '%s  %s\n' "$hash" "$(basename "$final")" >"$sha"
+  chown netlog:netlog "$final" "$meta" "$sha"
+  chmod 0640 "$final" "$meta" "$sha"
   (cd "$dir" && sha256sum -c "$(basename "$sha")" >/dev/null)
   # If a GUI-configured remote storage is active and verified, copy all
   # archive artifacts before the source DB table can be dropped.
   if ! {
-    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$final")" --relative "$y/$m/$(basename "$final")" --sha256 "$hash" &&
-    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$meta")" --relative "$y/$m/$(basename "$meta")" &&
-    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "/archive/mikrotik/$y/$m/$(basename "$sha")" --relative "$y/$m/$(basename "$sha")";
+    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "$final" --relative "$y/$m/$(basename "$final")" --sha256 "$hash" &&
+    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "$meta" --relative "$y/$m/$(basename "$meta")" &&
+    runuser -u netlog -- env PYTHONPATH=/opt/netlog-manager /opt/netlog-manager/venv/bin/python -m app.storage_sync --file "$sha" --relative "$y/$m/$(basename "$sha")";
   }; then
     rm -f "$final" "$meta" "$sha"
     die "Remote archive replication failed for $table; source table preserved and local partial archive reset."
   fi
-  chown netlog:netlog "$final" "$meta" "$sha"
-  chmod 0640 "$final" "$meta" "$sha"
   still_exists="$(db -N -B -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$DB' AND table_name='$table';")"
   [[ "$still_exists" == "1" ]] || die "Source table disappeared before DROP: $table"
   db "$DB" -e "DROP TABLE \`$table\`;"
