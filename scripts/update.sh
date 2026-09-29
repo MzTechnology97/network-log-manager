@@ -108,6 +108,7 @@ rollback(){
   else
     rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
     rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
+    rsync -a --delete "$REPO/static/" /opt/netlog-manager/static/
     systemctl restart netlog-manager.service
   fi
 }
