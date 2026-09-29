@@ -27,6 +27,15 @@
             Export
         </a>
 
+        {% if "Administrator" in session.roles %}
+        <a href="/admin/operations"
+           {% if active_page == "operations" %}
+           class="active"
+           {% endif %}>
+            Operations
+        </a>
+        {% endif %}
+
     </nav>
 
     <details class="nlm-account-menu">
@@ -75,10 +84,6 @@
 
             <a href="/admin/settings">
                 Impostazioni
-            </a>
-
-            <a href="/admin/operations">
-                Operations / Monitoraggio
             </a>
 
             {% endif %}
