@@ -5,11 +5,12 @@ from datetime import datetime
 from pathlib import Path
 
 from .database import app_db
+from .config import ENV
 
 STATE_DIR = Path("/var/lib/netlog-manager/workers")
-LIVE_LOG = Path(os.environ.get("LIVE_LOG", "/var/log/network.log"))
-OPS_LOG_ROOT = Path(os.environ.get("OPS_LOG_ROOT", "/var/lib/netlog-manager/ops-host/logs"))
-OPS_STATUS_FILE = Path(os.environ.get("OPS_STATUS_FILE", "/var/lib/netlog-manager/ops-host/status.tsv"))
+LIVE_LOG = Path(ENV.get("LIVE_LOG", "/var/log/network.log"))
+OPS_LOG_ROOT = Path(ENV.get("OPS_LOG_ROOT", "/var/lib/netlog-manager/ops-host/logs"))
+OPS_STATUS_FILE = Path(ENV.get("OPS_STATUS_FILE", "/var/lib/netlog-manager/ops-host/status.tsv"))
 
 WORKERS = {
     "monitor": 180,
@@ -72,8 +73,8 @@ def service_health():
         out.append(_state("MariaDB", "DOWN", str(exc)[:240]))
 
     try:
-        host = os.environ.get("SYSLOG_LISTENER_HOST", "syslog")
-        port = int(os.environ.get("SYSLOG_LISTENER_PORT", "5514"))
+        host = ENV.get("SYSLOG_LISTENER_HOST", "syslog")
+        port = int(ENV.get("SYSLOG_LISTENER_PORT", "5514"))
         started = time.monotonic()
         with socket.create_connection((host, port), timeout=2):
             pass
