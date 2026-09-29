@@ -75,7 +75,7 @@ def parse_tuple_line(line: str):
 
     parts = payload.split("','")
 
-    if len(parts) != 6:
+    if len(parts) not in (6, 9):
         return None
 
     # Primo e ultimo apice.
@@ -84,7 +84,7 @@ def parse_tuple_line(line: str):
     if parts[-1].endswith("'"):
         parts[-1] = parts[-1][:-1]
 
-    if len(parts) != 6:
+    if len(parts) not in (6, 9):
         return None
 
     return parts
