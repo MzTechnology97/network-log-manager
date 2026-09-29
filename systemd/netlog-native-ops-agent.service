@@ -1,0 +1,17 @@
+[Unit]
+Description=Network Log Manager native operations watchdog
+After=network.target mariadb.service syslog-ng.service apache2.service netlog-manager.service
+Wants=netlog-manager.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/netlog-manager/scripts/native-ops-agent.sh
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
