@@ -96,6 +96,7 @@ def parse_tuple_line(line: str):
     rows = parse_tuple_rows(line)
     return rows[0] if rows else None
 
+
 def normalize_protocol(value: str):
     return PROTO_MAP.get(value, value.upper())
 
@@ -225,8 +226,8 @@ def search_archive(
                         "timestamp": ts_raw,
                         "source_ip": src_ip,
                         "source_port": int(src_port_raw),
-                        "nat_source_ip": None,
-                        "nat_source_port": None,
+                        "nat_source_ip": nat_src_ip,
+                        "nat_source_port": int(nat_src_port_raw) if nat_src_port_raw not in (None, "") else None,
                         "dest_ip": dst_ip,
                         "dest_port": int(dst_port_raw),
                         "protocol": proto,
@@ -306,7 +307,7 @@ def main():
 
     if archive["schema_generation"] not in ("legacy", "nat-v1"):
         raise SystemExit(
-            Schema archivio non supportato: "
+            "Schema archivio non supportato: "
             f"{archive['schema_generation']}"
         )
 
