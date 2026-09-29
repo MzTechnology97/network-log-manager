@@ -80,6 +80,8 @@ chmod 0644 /opt/netlog-manager/app/*.py
 log "Installing application systemd units"
 for unit in netlog-manager.service netlog-monitor.service netlog-native-ops-agent.service \
   netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service \
+  netlog-native-archive.timer netlog-native-retention.timer \
+  netlog-native-archive.service netlog-native-archive.timer netlog-native-retention.service netlog-native-retention.timer \
   netlog-update.service netlog-update.timer
 do
   install -m 0644 "$ROOT/systemd/$unit" "/etc/systemd/system/$unit"
@@ -87,6 +89,7 @@ done
 install -d -o root -g root -m 0755 /opt/netlog-manager/scripts
 rsync -a --delete "$ROOT/scripts/" /opt/netlog-manager/scripts/
 chmod 0755 /opt/netlog-manager/scripts/native-worker.sh /opt/netlog-manager/scripts/native-ops-agent.sh
+install -m 0644 "$ROOT/logrotate/netlog-manager" /etc/logrotate.d/netlog-manager
 # Remove/disable the legacy timer/path scheduling model. Native workers now
 # stay alive like their Docker counterparts so heartbeat monitoring is truthful.
 systemctl disable --now netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer >/dev/null 2>&1 || true
@@ -101,6 +104,7 @@ log "Validating application import"
 systemctl restart netlog-manager.service
 systemctl restart netlog-monitor.service netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service
 systemctl restart netlog-native-ops-agent.service
+systemctl start netlog-native-archive.timer netlog-native-retention.timer
 
 log "Persistent archive: $ARCHIVE_ROOT"
 log "Disposable historical cache: /var/cache/netlog-manager/history"
