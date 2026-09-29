@@ -135,6 +135,7 @@ else
   source "$CONFIG_DIR/install.env"
   rsync -a --delete "$REPO/app/" /opt/netlog-manager/app/
   rsync -a --delete "$REPO/templates/" /opt/netlog-manager/templates/
+  rsync -a --delete "$REPO/static/" /opt/netlog-manager/static/
   install -m 0755 "$REPO/create-admin.py" /opt/netlog-manager/create-admin.py
   install -m 0644 "$REPO/requirements.txt" /opt/netlog-manager/requirements.txt
   /opt/netlog-manager/venv/bin/pip install --disable-pip-version-check -r /opt/netlog-manager/requirements.txt
