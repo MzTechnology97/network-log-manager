@@ -20,6 +20,6 @@ destination d_mysql {
  database("syslogdb") table("mikrotik_logs_${YEAR}_${MONTH}_${DAY}")
  columns("timestamp","source_ip","source_port","dest_ip","dest_port","protocol","nat_source_ip","nat_source_port")
  values("${S_YEAR}-${S_MONTH}-${S_DAY} ${S_HOUR}:${S_MIN}:${S_SEC}","${NET_SRCIP}","${NET_SRCPORT}","${NET_DSTIP}","${NET_DSTPORT}","${NET_PROTO}","${NET_NATIP}","${NET_NATPORT}")
- session-statements("SET SESSION sql_mode=''") log-fifo-size(10000) batch-lines(1) frac-digits(3));
+ session-statements("SET SESSION sql_mode=''") flags(dont-create-tables) log-fifo-size(10000) batch-lines(1) frac-digits(3));
 };
 log { source(s_network); parser(p_network_parser); filter(f_valid_logs); destination(d_network_logs); destination(d_mysql); };
