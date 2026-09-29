@@ -147,7 +147,8 @@ else
   for unit in "$REPO"/systemd/*; do [[ -f "$unit" ]] && install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"; done
   install -d -m 0755 /opt/netlog-manager/scripts
   rsync -a --delete "$REPO/scripts/" /opt/netlog-manager/scripts/
-  chmod 0755 /opt/netlog-manager/scripts/native-worker.sh /opt/netlog-manager/scripts/native-ops-agent.sh
+  chmod 0755 /opt/netlog-manager/scripts/native-worker.sh /opt/netlog-manager/scripts/native-ops-agent.sh /opt/netlog-manager/scripts/archive-native.sh /opt/netlog-manager/scripts/retention-native.sh
+  install -m 0644 "$REPO/logrotate/netlog-manager" /etc/logrotate.d/netlog-manager
   install -d -o netlog -g netlog -m 0750 "$STATE_DIR/workers"
   install -d -o root -g netlog -m 0750 "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
   python3 - /opt/netlog-manager/config/app.env "$TZ" "$SYSLOG_PORT" <<'PY'
@@ -177,7 +178,8 @@ PY
   systemctl disable --now netlog-archive-cache.timer netlog-export-worker.path netlog-export-cleanup.timer >/dev/null 2>&1 || true
   systemctl daemon-reload
   systemctl enable netlog-manager.service netlog-monitor.service netlog-native-ops-agent.service \
-    netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service
+    netlog-archive-cache.service netlog-export-worker.service netlog-export-cleanup.service \
+    netlog-native-archive.timer netlog-native-retention.timer
   systemctl restart netlog-manager.service netlog-monitor.service netlog-archive-cache.service \
     netlog-export-worker.service netlog-export-cleanup.service netlog-native-ops-agent.service
 fi
