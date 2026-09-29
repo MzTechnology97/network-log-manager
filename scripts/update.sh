@@ -47,7 +47,21 @@ esac
 [[ -n "$target" ]] || die "No release is available for channel ${UPDATE_CHANNEL:-stable}."
 target_commit="$(git rev-parse "$target^{commit}")"
 if [[ "$target_commit" == "$deployed_revision" ]]; then
-  log "Deployment already up to date: $target_commit"
+  # Keep host-side deployment helpers self-healing even when application code
+  # is already at the requested revision. This is important when an older
+  # updater deployed the commit before a newly introduced systemd unit existed.
+  if [[ "$MODE" == docker && ( ! -x /opt/netlog-manager/scripts/ops-agent.sh || ! -f /etc/systemd/system/netlog-ops-agent.service ) ]]; then
+    log "Application is current but Operations watchdog is missing; repairing host integration."
+    source "$CONFIG_DIR/install.env"
+    install -d -o root -g 999 -m 0750 "$STATE_DIR/ops" "$STATE_DIR/ops/logs"
+    install -m 0755 "$REPO/scripts/ops-agent.sh" /opt/netlog-manager/scripts/ops-agent.sh
+    install -m 0644 "$REPO/systemd/netlog-ops-agent.service" /etc/systemd/system/netlog-ops-agent.service
+    systemctl daemon-reload
+    systemctl enable --now netlog-ops-agent.service
+    log "Operations watchdog repaired."
+  else
+    log "Deployment already up to date: $target_commit"
+  fi
   exit 0
 fi
 
