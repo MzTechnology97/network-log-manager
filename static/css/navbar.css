@@ -252,3 +252,27 @@ header.nlm-header details.nlm-account-menu[open] > .nlm-account-dropdown {
         justify-content: flex-start;
     }
 }
+
+.nlm-user-tools{justify-self:end;display:flex;align-items:center;gap:6px}
+.nlm-user-tools .nlm-account-menu{justify-self:auto}
+.nlm-alert-menu{position:relative}
+.nlm-alert-menu summary{position:relative;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#cbd5e1;cursor:pointer;list-style:none;user-select:none}
+.nlm-alert-menu summary::-webkit-details-marker{display:none}
+.nlm-alert-menu summary:hover,.nlm-alert-menu[open] summary{background:#172033;color:#fff}
+.nlm-bell{font-size:0;width:21px;height:23px;display:block;position:relative}
+.nlm-bell:before{content:"";position:absolute;left:4px;top:3px;width:13px;height:14px;border:2px solid currentColor;border-top-left-radius:9px;border-top-right-radius:9px;border-bottom:0}
+.nlm-bell:after{content:"";position:absolute;left:2px;bottom:3px;width:17px;height:7px;border:2px solid currentColor;border-top:0;border-radius:0 0 10px 10px;box-shadow:0 4px 0 -2px currentColor}
+.nlm-alert-badge{position:absolute;top:3px;right:2px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:#ef4444;color:white;font-size:10px;font-weight:700;line-height:17px;text-align:center}
+.nlm-alert-dropdown{display:none;position:absolute;top:calc(100% + 8px);right:0;width:min(420px,calc(100vw - 24px));max-height:520px;overflow:hidden;background:#111827;border:1px solid #334155;border-radius:12px;box-shadow:0 18px 45px rgba(0,0,0,.4)}
+.nlm-alert-menu[open] .nlm-alert-dropdown{display:block}
+.nlm-alert-heading{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #253047;color:#f8fafc}
+.nlm-alert-heading span{min-width:24px;padding:2px 7px;border-radius:999px;background:#1e293b;color:#cbd5e1;font-size:12px;text-align:center}
+.nlm-alert-list{max-height:455px;overflow-y:auto}
+.nlm-alert-item{padding:13px 16px;border-bottom:1px solid #253047}
+.nlm-alert-item:last-child{border-bottom:0}
+.nlm-alert-item strong{display:block;margin:5px 0;color:#f8fafc;font-size:14px}
+.nlm-alert-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;color:#64748b;font-size:11px}
+.nlm-alert-severity{font-weight:700}.nlm-alert-severity.critical,.nlm-alert-severity.error{color:#f87171}.nlm-alert-severity.warning{color:#fbbf24}.nlm-alert-severity.info{color:#60a5fa}
+.nlm-alert-message{color:#94a3b8;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.nlm-alert-empty{padding:24px 16px;color:#94a3b8;text-align:center}
+@media(max-width:900px){.nlm-user-tools{grid-column:2;grid-row:1}.nlm-account-menu{grid-column:auto!important;grid-row:auto!important}}
