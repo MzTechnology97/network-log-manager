@@ -68,7 +68,10 @@ while true; do
   tmp="$STATUS_FILE.tmp"
   : >"$tmp"
   for service in "${SERVICES[@]}"; do
-    IFS=$'\t' read -r status detail < <(container_state "$service")
+    # read returns 1 at EOF when the payload has no trailing newline; that is
+    # expected here and must not trip errexit after the fields were captured.
+    IFS="$(printf '\t')" read -r status detail < <(container_state "$service") || true
+    [[ -n "${status:-}" ]] || { status="DOWN"; detail="state probe returned no data"; }
     printf '%s\t%s\t%s\t%s\n' "$service" "$status" "$(date +%s)" "$detail" >>"$tmp"
     "${C[@]}" --env-file "$ENV_FILE" logs --no-color --timestamps --tail=400 "$service" >"$LOG_DIR/$service.log" 2>&1 || true
     restart_if_needed "$service" "$status"
