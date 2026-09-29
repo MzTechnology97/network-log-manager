@@ -68,7 +68,19 @@ while true; do
   tmp="$STATUS_FILE.tmp"
   : >"$tmp"
   for service in "${SERVICES[@]}"; do
-    IFS=$'\t' read -r status detail < <(container_state "$service")
+    # read returns 1 when the producer does not terminate with a newline. The
+    # state payload intentionally has no newline, so tolerate that status under
+    # set -e while still capturing both tab-separated fields.
+    IFS=
+    printf '%s\t%s\t%s\t%s\n' "$service" "$status" "$(date +%s)" "$detail" >>"$tmp"
+    "${C[@]}" --env-file "$ENV_FILE" logs --no-color --timestamps --tail=400 "$service" >"$LOG_DIR/$service.log" 2>&1 || true
+    restart_if_needed "$service" "$status"
+  done
+  mv "$tmp" "$STATUS_FILE"
+  sleep "$INTERVAL"
+done
+\t' read -r status detail < <(container_state "$service") || true
+    [[ -n "${status:-}" ]] || { status="DOWN"; detail="state probe returned no data"; }
     printf '%s\t%s\t%s\t%s\n' "$service" "$status" "$(date +%s)" "$detail" >>"$tmp"
     "${C[@]}" --env-file "$ENV_FILE" logs --no-color --timestamps --tail=400 "$service" >"$LOG_DIR/$service.log" 2>&1 || true
     restart_if_needed "$service" "$status"
