@@ -36,29 +36,83 @@ def required_segments(start_dt: datetime, end_dt: datetime):
     return segments
 
 
+def parse_cache_line(line: str):
+    """Parse legacy tsv-v1 and current tsv-v2 cache rows.
+
+    tsv-v1:
+      timestamp, source_ip, source_port, dest_ip, dest_port, protocol
+
+    tsv-v2:
+      timestamp, source_ip, source_port, nat_source_ip, nat_source_port,
+      dest_ip, dest_port, protocol
+    """
+    parts = line.rstrip("\n").split("\t")
+
+    if len(parts) == 6:
+        (
+            timestamp,
+            src_ip,
+            src_port_raw,
+            dst_ip,
+            dst_port_raw,
+            proto,
+        ) = parts
+        nat_src_ip = ""
+        nat_src_port_raw = ""
+    elif len(parts) == 8:
+        (
+            timestamp,
+            src_ip,
+            src_port_raw,
+            nat_src_ip,
+            nat_src_port_raw,
+            dst_ip,
+            dst_port_raw,
+            proto,
+        ) = parts
+    else:
+        return None
+
+    try:
+        src_port = int(src_port_raw)
+        dst_port = int(dst_port_raw)
+        nat_src_port = (
+            int(nat_src_port_raw)
+            if nat_src_port_raw
+            else None
+        )
+    except (TypeError, ValueError):
+        return None
+
+    return {
+        "timestamp": timestamp,
+        "source_ip": src_ip,
+        "source_port": src_port,
+        "nat_source_ip": nat_src_ip or None,
+        "nat_source_port": nat_src_port,
+        "dest_ip": dst_ip,
+        "dest_port": dst_port,
+        "protocol": proto.upper(),
+        "storage": "archive-cache",
+    }
+
+
 def search_cache(
     log_date: str,
     start_iso: str,
     end_iso: str,
     source_ip=None,
     source_port=None,
+    nat_source_ip=None,
+    nat_source_port=None,
     dest_ip=None,
     dest_port=None,
     protocol=None,
     limit=MAX_RESULTS,
 ):
-    #
-    # Le cache storiche sono segmentate secondo
-    # l'ora locale presente nel log originale.
-    #
-    # Per la selezione dei segmenti e per il confronto
-    # temporale utilizziamo quindi esclusivamente la
-    # componente locale YYYY-MM-DDTHH:MM:SS.mmm.
-    #
-    # L'offset originale (+01:00/+02:00) resta conservato
-    # nel record restituito, ma non influenza la ricerca
-    # richiesta dalla GUI, che lavora in Europe/Rome.
-    #
+    # Cache segments are keyed by local wall-clock time.  Keep comparisons on
+    # YYYY-MM-DDTHH:MM:SS.mmm so the repeated DST hour remains searchable while
+    # preserving the original offset in the returned timestamp.
     start_key = str(start_iso)[:23]
     end_key = str(end_iso)[:23]
 
@@ -130,73 +184,71 @@ def search_cache(
             for line in proc.stdout:
                 scanned_rows += 1
 
-                line = line.rstrip("\n")
+                row = parse_cache_line(line)
 
-                parts = line.split("\t")
-
-                if len(parts) != 6:
+                if row is None:
                     continue
 
-                (
-                    timestamp,
-                    src_ip,
-                    src_port_raw,
-                    dst_ip,
-                    dst_port_raw,
-                    proto,
-                ) = parts
-
-                timestamp_local = timestamp[:23]
+                timestamp_local = row["timestamp"][:23]
 
                 if timestamp_local < start_key:
                     continue
 
+                # Do not break here: the local 02:xx interval can occur twice
+                # during the DST fallback and concatenated zstd frames preserve
+                # both occurrences in the same segment.
                 if timestamp_local > end_key:
-                    #
-                    # Non usare break: durante il ritorno
-                    # CET una fascia 02:xx può comparire
-                    # nuovamente dopo una fascia successiva
-                    # appartenente al primo ciclo DST.
-                    #
                     continue
 
                 rows_in_window += 1
 
-                if source_ip is not None:
-                    if src_ip != source_ip:
-                        continue
+                if (
+                    source_ip is not None
+                    and row["source_ip"] != source_ip
+                ):
+                    continue
 
-                if source_port is not None:
-                    if src_port_raw != str(source_port):
-                        continue
+                if (
+                    source_port is not None
+                    and row["source_port"] != source_port
+                ):
+                    continue
 
-                if dest_ip is not None:
-                    if dst_ip != dest_ip:
-                        continue
+                if (
+                    nat_source_ip is not None
+                    and row["nat_source_ip"] != nat_source_ip
+                ):
+                    continue
 
-                if dest_port is not None:
-                    if dst_port_raw != str(dest_port):
-                        continue
+                if (
+                    nat_source_port is not None
+                    and row["nat_source_port"] != nat_source_port
+                ):
+                    continue
 
-                if protocol is not None:
-                    if proto != protocol:
-                        continue
+                if (
+                    dest_ip is not None
+                    and row["dest_ip"] != dest_ip
+                ):
+                    continue
+
+                if (
+                    dest_port is not None
+                    and row["dest_port"] != dest_port
+                ):
+                    continue
+
+                if (
+                    protocol is not None
+                    and row["protocol"] != protocol
+                ):
+                    continue
 
                 if len(results) >= limit:
                     truncated = True
                     break
 
-                results.append({
-                    "timestamp": timestamp,
-                    "source_ip": src_ip,
-                    "source_port": int(src_port_raw),
-                    "nat_source_ip": None,
-                    "nat_source_port": None,
-                    "dest_ip": dst_ip,
-                    "dest_port": int(dst_port_raw),
-                    "protocol": proto,
-                    "storage": "archive-cache",
-                })
+                results.append(row)
 
         finally:
             if proc.stdout is not None:
@@ -236,6 +288,8 @@ def main():
 
     parser.add_argument("--source-ip")
     parser.add_argument("--source-port", type=int)
+    parser.add_argument("--nat-source-ip")
+    parser.add_argument("--nat-source-port", type=int)
     parser.add_argument("--dest-ip")
     parser.add_argument("--dest-port", type=int)
 
@@ -258,6 +312,8 @@ def main():
         end_iso=args.end,
         source_ip=args.source_ip,
         source_port=args.source_port,
+        nat_source_ip=args.nat_source_ip,
+        nat_source_port=args.nat_source_port,
         dest_ip=args.dest_ip,
         dest_port=args.dest_port,
         protocol=args.protocol,
@@ -265,33 +321,21 @@ def main():
     )
 
     print()
-    print(
-        "Segmenti:       "
-        + ", ".join(result["segments"])
-    )
-    print(
-        f"Record letti:   "
-        f"{result['scanned_rows']:,}"
-    )
-    print(
-        f"Record finestra:"
-        f" {result['rows_in_window']:,}"
-    )
-    print(
-        f"Risultati:      "
-        f"{result['count']}"
-    )
-    print(
-        f"Troncato:       "
-        f"{result['truncated']}"
-    )
-    print(
-        f"Tempo:          "
-        f"{result['elapsed']:.3f} s"
-    )
+    print("Segmenti:       " + ", ".join(result["segments"]))
+    print(f"Record letti:   {result['scanned_rows']:,}")
+    print(f"Record finestra: {result['rows_in_window']:,}")
+    print(f"Risultati:      {result['count']}")
+    print(f"Troncato:       {result['truncated']}")
+    print(f"Tempo:          {result['elapsed']:.3f} s")
     print()
 
     for row in result["results"][:20]:
+        nat = ""
+        if row["nat_source_ip"] is not None:
+            nat = (
+                f" NAT {row['nat_source_ip']}:"
+                f"{row['nat_source_port']}"
+            )
         print(
             row["timestamp"],
             row["source_ip"],
@@ -300,6 +344,7 @@ def main():
             row["dest_ip"],
             row["dest_port"],
             row["protocol"],
+            nat,
         )
 
     if result["count"] > 20:
