@@ -39,9 +39,9 @@ for table in "${tables[@]}"; do
   (( LIMIT == 0 || done_count < LIMIT )) || break
   [[ "$table" =~ ^mikrotik_logs_([0-9]{4})_([0-9]{2})_([0-9]{2})$ ]] || continue
   y="${BASH_REMATCH[1]}"; m="${BASH_REMATCH[2]}"; d="${BASH_REMATCH[3]}"
-  dir="$ARCHIVE_ROOT/$y/$m"; final="$dir/$table.sql.zst"; tmp="$dir/.$table.sql.zst.tmp"
+  year_dir="$ARCHIVE_ROOT/$y"; dir="$year_dir/$m"; final="$dir/$table.sql.zst"; tmp="$dir/.$table.sql.zst.tmp"
   meta="$dir/$table.meta"; sha="$dir/$table.sql.zst.sha256"
-  install -d -o "$ARCHIVE_UID" -g "$ARCHIVE_GID" -m 0750 "$dir"
+  install -d -o "$ARCHIVE_UID" -g "$ARCHIVE_GID" -m 0750 "$year_dir" "$dir"
   [[ ! -e "$final" ]] || { log "Archive exists, keeping DB table: $table"; continue; }
   rows="$(db -N -B "$DB" -e "SELECT COUNT(*) FROM \`$table\`;")"
   log "Archiving $table ($rows rows)"
