@@ -6,6 +6,8 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from .archive_search import normalize_archive_timestamp
+
 
 CACHE_ROOT = Path("/var/cache/netlog-manager/history")
 MAX_RESULTS = 1000
@@ -45,6 +47,10 @@ def parse_cache_line(line: str):
     tsv-v2:
       timestamp, source_ip, source_port, nat_source_ip, nat_source_port,
       dest_ip, dest_port, protocol
+
+    Older caches can contain the MariaDB DATETIME separator (space) rather
+    than the ISO ``T`` separator.  Normalize it while reading so deployed v3
+    caches stay searchable without forcing a full cache rebuild.
     """
     parts = line.rstrip("\n").split("\t")
 
@@ -72,6 +78,8 @@ def parse_cache_line(line: str):
         ) = parts
     else:
         return None
+
+    timestamp = normalize_archive_timestamp(timestamp)
 
     try:
         src_port = int(src_port_raw)
@@ -113,8 +121,8 @@ def search_cache(
     # Cache segments are keyed by local wall-clock time.  Keep comparisons on
     # YYYY-MM-DDTHH:MM:SS.mmm so the repeated DST hour remains searchable while
     # preserving the original offset in the returned timestamp.
-    start_key = str(start_iso)[:23]
-    end_key = str(end_iso)[:23]
+    start_key = normalize_archive_timestamp(str(start_iso))[:23]
+    end_key = normalize_archive_timestamp(str(end_iso))[:23]
 
     try:
         start_dt = datetime.fromisoformat(start_key)
