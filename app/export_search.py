@@ -1,10 +1,30 @@
 import csv
 import os
 import secrets
-from datetime import datetime
+import subprocess
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import pymysql
+
 from .config import ENV
+from .advanced_search import (
+    AdvancedSearchError,
+    archive_has_nat,
+    get_archive_map,
+    get_existing_tables,
+    get_table_columns,
+    optional_ipv4,
+    optional_port,
+    optional_protocol,
+    tables_for_range,
+)
+from .archive_cache import cache_is_valid
+from .archive_cache_search import (
+    CACHE_ROOT,
+    parse_cache_line,
+    required_segments,
+)
 
 
 EXPORT_ROOT = Path(
@@ -16,6 +36,7 @@ EXPORT_ROOT = Path(
 
 EXPORT_PREFIX = "network-log-export"
 EXPORT_MAX_AGE_HOURS = 24
+EXPORT_MAX_ROWS = 2_000_000
 
 
 class ExportError(Exception):
@@ -35,7 +56,6 @@ CSV_FIELDS = [
     "table",
 ]
 
-
 CSV_HEADER = [
     "Timestamp",
     "Protocollo",
@@ -51,25 +71,15 @@ CSV_HEADER = [
 
 
 def ensure_export_root():
-    EXPORT_ROOT.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 def create_export_path():
     ensure_export_root()
 
-    timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
-    )
-
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     token = secrets.token_hex(4)
-
-    filename = (
-        f"{EXPORT_PREFIX}_"
-        f"{timestamp}_{token}.csv"
-    )
+    filename = f"{EXPORT_PREFIX}_{timestamp}_{token}.csv"
 
     return EXPORT_ROOT / filename
 
@@ -79,14 +89,8 @@ def format_timestamp(value):
         return ""
 
     if isinstance(value, datetime):
-        return value.strftime(
-            "%Y-%m-%d %H:%M:%S.%f"
-        )[:-3]
+        return value.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
-    #
-    # Per gli archivi manteniamo la stringa originale,
-    # compreso l'eventuale offset UTC.
-    #
     return str(value)
 
 
@@ -95,16 +99,13 @@ def csv_row(row):
         "_storage",
         row.get("storage", ""),
     )
-
     table = row.get(
         "_table",
         row.get("table", ""),
     )
 
     return [
-        format_timestamp(
-            row.get("timestamp")
-        ),
+        format_timestamp(row.get("timestamp")),
         row.get("protocol") or "",
         row.get("source_ip") or "",
         row.get("source_port") or "",
@@ -130,7 +131,6 @@ def open_csv_writer(path):
         delimiter=";",
         quoting=csv.QUOTE_MINIMAL,
     )
-
     writer.writerow(CSV_HEADER)
 
     return fh, writer
@@ -143,33 +143,6 @@ def remove_file_quietly(path):
         pass
 
 
-# ============================================================
-# Streaming export engine
-# ============================================================
-
-import subprocess
-from datetime import timedelta
-
-import pymysql
-
-from .advanced_search import (
-    AdvancedSearchError,
-    optional_ipv4,
-    optional_port,
-    optional_protocol,
-    tables_for_range,
-    get_existing_tables,
-    get_table_columns,
-    get_archive_map,
-)
-
-from .archive_cache import cache_is_valid
-from .archive_cache_search import required_segments
-
-
-EXPORT_MAX_ROWS = 2_000_000
-
-
 def _normalise_filters(
     source_ip=None,
     source_port=None,
@@ -179,29 +152,14 @@ def _normalise_filters(
     dest_port=None,
     protocol=None,
 ):
-    source_ip = optional_ipv4(source_ip)
-    source_port = optional_port(source_port)
-
-    nat_source_ip = optional_ipv4(
-        nat_source_ip
-    )
-
-    nat_source_port = optional_port(
-        nat_source_port
-    )
-
-    dest_ip = optional_ipv4(dest_ip)
-    dest_port = optional_port(dest_port)
-    protocol = optional_protocol(protocol)
-
     filters = {
-        "source_ip": source_ip,
-        "source_port": source_port,
-        "nat_source_ip": nat_source_ip,
-        "nat_source_port": nat_source_port,
-        "dest_ip": dest_ip,
-        "dest_port": dest_port,
-        "protocol": protocol,
+        "source_ip": optional_ipv4(source_ip),
+        "source_port": optional_port(source_port),
+        "nat_source_ip": optional_ipv4(nat_source_ip),
+        "nat_source_port": optional_port(nat_source_port),
+        "dest_ip": optional_ipv4(dest_ip),
+        "dest_port": optional_port(dest_port),
+        "protocol": optional_protocol(protocol),
     }
 
     active = {
@@ -212,8 +170,7 @@ def _normalise_filters(
 
     if not active:
         raise AdvancedSearchError(
-            "Specificare almeno un filtro oltre "
-            "all'intervallo temporale."
+            "Specificare almeno un filtro oltre all'intervallo temporale."
         )
 
     return filters, active
@@ -227,6 +184,8 @@ def _archive_rows(
     end,
     source_ip=None,
     source_port=None,
+    nat_source_ip=None,
+    nat_source_port=None,
     dest_ip=None,
     dest_port=None,
     protocol=None,
@@ -249,39 +208,31 @@ def _archive_rows(
             f"{day.isoformat()}: {reason}"
         )
 
-    day_start = datetime.combine(
-        day,
-        datetime.min.time(),
-    )
+    if (
+        (nat_source_ip is not None or nat_source_port is not None)
+        and not archive_has_nat(archive)
+    ):
+        raise ExportError(
+            "I filtri NAT non sono disponibili nell'archivio "
+            f"storico legacy ({day.isoformat()})."
+        )
 
+    day_start = datetime.combine(day, datetime.min.time())
     day_end = day_start + timedelta(days=1)
-
     query_start = max(start, day_start)
     query_end = min(end, day_end)
 
     start_key = query_start.isoformat(
         timespec="milliseconds"
     )[:23]
-
     end_key = query_end.isoformat(
         timespec="milliseconds"
     )[:23]
 
-    protocol = (
-        protocol.upper()
-        if protocol
-        else None
-    )
+    protocol = protocol.upper() if protocol else None
+    cache_dir = CACHE_ROOT / day.isoformat()
 
-    cache_dir = (
-        Path("/var/cache/netlog-manager/history")
-        / day.isoformat()
-    )
-
-    for segment in required_segments(
-        query_start,
-        query_end,
-    ):
+    for segment in required_segments(query_start, query_end):
         path = cache_dir / f"{segment}.tsv.zst"
 
         if not path.is_file():
@@ -306,83 +257,66 @@ def _archive_rows(
             assert proc.stdout is not None
 
             for line in proc.stdout:
-                parts = line.rstrip("\n").split("\t")
+                row = parse_cache_line(line)
 
-                if len(parts) != 6:
+                if row is None:
                     continue
 
-                (
-                    timestamp,
-                    src_ip,
-                    src_port_raw,
-                    dst_ip,
-                    dst_port_raw,
-                    proto,
-                ) = parts
-
-                timestamp_local = timestamp[:23]
+                timestamp_local = row["timestamp"][:23]
 
                 if timestamp_local < start_key:
                     continue
 
-                #
-                # Non usare break qui.
-                # Una fascia locale può ripetersi
-                # durante il ritorno DST.
-                #
+                # Do not break: the local 02:xx interval may appear twice at
+                # the DST fallback inside concatenated zstd frames.
                 if timestamp_local > end_key:
                     continue
 
                 if (
                     source_ip is not None
-                    and src_ip != source_ip
+                    and row["source_ip"] != source_ip
                 ):
                     continue
 
                 if (
                     source_port is not None
-                    and src_port_raw
-                    != str(source_port)
+                    and row["source_port"] != source_port
+                ):
+                    continue
+
+                if (
+                    nat_source_ip is not None
+                    and row["nat_source_ip"] != nat_source_ip
+                ):
+                    continue
+
+                if (
+                    nat_source_port is not None
+                    and row["nat_source_port"] != nat_source_port
                 ):
                     continue
 
                 if (
                     dest_ip is not None
-                    and dst_ip != dest_ip
+                    and row["dest_ip"] != dest_ip
                 ):
                     continue
 
                 if (
                     dest_port is not None
-                    and dst_port_raw
-                    != str(dest_port)
+                    and row["dest_port"] != dest_port
                 ):
                     continue
 
                 if (
                     protocol is not None
-                    and proto != protocol
+                    and row["protocol"] != protocol
                 ):
                     continue
 
-                yield {
-                    "timestamp": timestamp,
-                    "source_ip": src_ip,
-                    "source_port": int(
-                        src_port_raw
-                    ),
-                    "nat_source_ip": None,
-                    "nat_source_port": None,
-                    "dest_ip": dst_ip,
-                    "dest_port": int(
-                        dst_port_raw
-                    ),
-                    "protocol": proto,
-                    "_storage": "archive",
-                    "_table": archive[
-                        "table_name"
-                    ],
-                }
+                row["_storage"] = "archive"
+                row["_table"] = archive["table_name"]
+                yield row
 
         finally:
             if proc.stdout is not None:
@@ -413,69 +347,47 @@ def generate_advanced_export(
     progress_callback=None,
     output_path=None,
 ):
-    filters, active_filters = (
-        _normalise_filters(
-            source_ip=source_ip,
-            source_port=source_port,
-            nat_source_ip=nat_source_ip,
-            nat_source_port=nat_source_port,
-            dest_ip=dest_ip,
-            dest_port=dest_port,
-            protocol=protocol,
-        )
+    filters, active_filters = _normalise_filters(
+        source_ip=source_ip,
+        source_port=source_port,
+        nat_source_ip=nat_source_ip,
+        nat_source_port=nat_source_port,
+        dest_ip=dest_ip,
+        dest_port=dest_port,
+        protocol=protocol,
     )
 
     source_ip = filters["source_ip"]
     source_port = filters["source_port"]
     nat_source_ip = filters["nat_source_ip"]
-    nat_source_port = filters[
-        "nat_source_port"
-    ]
+    nat_source_port = filters["nat_source_port"]
     dest_ip = filters["dest_ip"]
     dest_port = filters["dest_port"]
     protocol = filters["protocol"]
 
-    requested_tables = tables_for_range(
-        start,
-        end,
-    )
-
-    table_names = [
-        table
-        for _, table in requested_tables
-    ]
-
+    requested_tables = tables_for_range(start, end)
+    table_names = [table for _, table in requested_tables]
     archive_map = get_archive_map(
-        [
-            day.isoformat()
-            for day, _ in requested_tables
-        ]
+        [day.isoformat() for day, _ in requested_tables]
     )
 
     if output_path is None:
         path = create_export_path()
     else:
         ensure_export_root()
-
         path = Path(output_path)
 
         if path.parent.resolve() != EXPORT_ROOT.resolve():
-            raise ExportError(
-                "Percorso export non consentito."
-            )
+            raise ExportError("Percorso export non consentito.")
 
     row_count = 0
     online_days = 0
     archive_days = 0
-
     conn = None
     fh = None
 
     try:
-        #
-        # Cursor server-side: le righe MariaDB
-        # non vengono caricate tutte in RAM.
-        #
+        # Server-side cursor keeps large online exports out of application RAM.
         conn = pymysql.connect(
             host=ENV["SYSLOG_DB_HOST"],
             user=ENV["SYSLOG_DB_USER"],
@@ -489,10 +401,7 @@ def generate_advanced_export(
         fh, writer = open_csv_writer(path)
 
         with conn.cursor() as cur:
-            existing = get_existing_tables(
-                cur,
-                table_names,
-            )
+            existing = get_existing_tables(cur, table_names)
 
         for day, table in requested_tables:
             if progress_callback is not None:
@@ -504,28 +413,16 @@ def generate_advanced_export(
                 )
 
             if table in existing:
-                #
-                # Con un cursor server-side non dobbiamo
-                # eseguire altre query sullo stesso cursor
-                # mentre stiamo iterando il risultato.
-                #
                 with conn.cursor(
                     pymysql.cursors.DictCursor
                 ) as meta_cur:
-                    columns = get_table_columns(
-                        meta_cur,
-                        table,
-                    )
+                    columns = get_table_columns(meta_cur, table)
 
-                missing = (
-                    set(active_filters)
-                    - columns
-                )
+                missing = set(active_filters) - columns
 
                 if missing:
                     raise ExportError(
-                        f"{table}: filtri non "
-                        f"supportati: "
+                        f"{table}: filtri non supportati: "
                         f"{', '.join(sorted(missing))}"
                     )
 
@@ -533,28 +430,15 @@ def generate_advanced_export(
                     day,
                     datetime.min.time(),
                 )
-
-                day_end = (
-                    day_start
-                    + timedelta(days=1)
-                )
-
-                query_start = max(
-                    start,
-                    day_start,
-                )
-
-                query_end = min(
-                    end,
-                    day_end,
-                )
+                day_end = day_start + timedelta(days=1)
+                query_start = max(start, day_start)
+                query_end = min(end, day_end)
 
                 select_nat_ip = (
                     "nat_source_ip"
                     if "nat_source_ip" in columns
                     else "NULL AS nat_source_ip"
                 )
-
                 select_nat_port = (
                     "nat_source_port"
                     if "nat_source_port" in columns
@@ -576,45 +460,27 @@ def generate_advanced_export(
                     WHERE timestamp >= %s
                       AND timestamp <= %s
                 """
+                params = [query_start, query_end]
 
-                params = [
-                    query_start,
-                    query_end,
-                ]
-
-                for field, value in (
-                    active_filters.items()
-                ):
-                    sql += (
-                        f" AND `{field}`=%s"
-                    )
+                for field, value in active_filters.items():
+                    sql += f" AND `{field}`=%s"
                     params.append(value)
 
-                sql += (
-                    " ORDER BY timestamp ASC, id ASC"
-                )
+                sql += " ORDER BY timestamp ASC, id ASC"
 
                 with conn.cursor() as data_cur:
-                    data_cur.execute(
-                        sql,
-                        params,
-                    )
+                    data_cur.execute(sql, params)
 
                     for row in data_cur:
                         if row_count >= max_rows:
                             raise ExportError(
-                                "Limite massimo export "
-                                f"superato: {max_rows:,} "
-                                "record."
+                                "Limite massimo export superato: "
+                                f"{max_rows:,} record."
                             )
 
                         row["_storage"] = "database"
                         row["_table"] = table
-
-                        writer.writerow(
-                            csv_row(row)
-                        )
-
+                        writer.writerow(csv_row(row))
                         row_count += 1
 
                         if (
@@ -631,9 +497,7 @@ def generate_advanced_export(
                 online_days += 1
                 continue
 
-            archive = archive_map.get(
-                day.isoformat()
-            )
+            archive = archive_map.get(day.isoformat())
 
             if archive is None:
                 raise ExportError(
@@ -641,26 +505,19 @@ def generate_advanced_export(
                     + day.isoformat()
                 )
 
-            if (
-                archive["archive_status"]
-                != "AVAILABLE"
-            ):
+            if archive["archive_status"] != "AVAILABLE":
                 raise ExportError(
                     "Archivio non disponibile per "
                     + day.isoformat()
                 )
 
-            #
-            # Gli archivi legacy non contengono NAT.
-            #
             if (
-                nat_source_ip is not None
-                or nat_source_port is not None
+                (nat_source_ip is not None or nat_source_port is not None)
+                and not archive_has_nat(archive)
             ):
                 raise ExportError(
-                    "I filtri NAT non sono disponibili "
-                    "negli archivi storici legacy "
-                    f"({day.isoformat()})."
+                    "I filtri NAT non sono disponibili nell'archivio "
+                    f"storico legacy ({day.isoformat()})."
                 )
 
             for row in _archive_rows(
@@ -670,21 +527,19 @@ def generate_advanced_export(
                 end=end,
                 source_ip=source_ip,
                 source_port=source_port,
+                nat_source_ip=nat_source_ip,
+                nat_source_port=nat_source_port,
                 dest_ip=dest_ip,
                 dest_port=dest_port,
                 protocol=protocol,
             ):
                 if row_count >= max_rows:
                     raise ExportError(
-                        "Limite massimo export "
-                        f"superato: {max_rows:,} "
-                        "record."
+                        "Limite massimo export superato: "
+                        f"{max_rows:,} record."
                     )
 
-                writer.writerow(
-                    csv_row(row)
-                )
-
+                writer.writerow(csv_row(row))
                 row_count += 1
 
                 if (
