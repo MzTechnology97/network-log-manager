@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Install unit-test dependency
+        run: python3 -m pip install --disable-pip-version-check 'PyMySQL==1.2.3'
       - name: Python syntax
         run: python3 -m compileall -q app tests
       - name: Cache compatibility tests
