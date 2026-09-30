@@ -61,6 +61,12 @@ jobs:
       - name: Native health check
         run: sudo /opt/netlog-manager/scripts/healthcheck.sh
 
+      - name: Administrator bootstrap is idempotent
+        run: |
+          output="$(sudo timeout 10 /opt/netlog-manager/scripts/create-initial-admin.sh </dev/null)"
+          echo "$output"
+          grep -Fq 'Administrator account already exists; skipping initial account creation.' <<<"$output"
+
       - name: Native service state
         run: |
           for unit in mariadb syslog-ng apache2 netlog-manager netlog-monitor netlog-archive-cache netlog-export-worker netlog-export-cleanup netlog-native-ops-agent; do
