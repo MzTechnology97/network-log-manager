@@ -3,6 +3,8 @@ name: Archive cache compatibility
 on:
   pull_request:
     paths:
+      - 'app/archive_search.py'
+      - 'app/archive_cache.py'
       - 'app/archive_cache_search.py'
       - 'app/advanced_search.py'
       - 'app/export_search.py'
@@ -11,6 +13,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'app/archive_search.py'
+      - 'app/archive_cache.py'
       - 'app/archive_cache_search.py'
       - 'app/advanced_search.py'
       - 'app/export_search.py'
