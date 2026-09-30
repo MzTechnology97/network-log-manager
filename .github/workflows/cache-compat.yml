@@ -1,0 +1,31 @@
+name: Archive cache compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'app/archive_cache_search.py'
+      - 'app/advanced_search.py'
+      - 'app/export_search.py'
+      - 'tests/**'
+      - '.github/workflows/cache-compat.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/archive_cache_search.py'
+      - 'app/advanced_search.py'
+      - 'app/export_search.py'
+      - 'tests/**'
+      - '.github/workflows/cache-compat.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  cache-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Python syntax
+        run: python3 -m compileall -q app tests
+      - name: Cache compatibility tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
