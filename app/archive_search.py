@@ -48,6 +48,20 @@ def get_archive(log_date: str):
         conn.close()
 
 
+def normalize_archive_timestamp(value: str):
+    """Return a canonical ISO-8601 timestamp for archive/cache comparisons.
+
+    MariaDB DATETIME values are emitted by mariadb-dump as
+    ``YYYY-MM-DD HH:MM:SS.mmm`` while the search API uses the ISO ``T``
+    separator.  Keeping one canonical representation makes lexical range
+    comparisons correct without parsing millions of rows as datetime objects.
+    Existing archives that already contain ``T`` remain unchanged.
+    """
+    if len(value) > 10 and value[10] == " ":
+        return value[:10] + "T" + value[11:]
+    return value
+
+
 def parse_tuple_rows(line: str):
     """Return normalized rows from legacy and nat-v1 mysqldump INSERT lines.
 
@@ -83,9 +97,11 @@ def parse_tuple_rows(line: str):
 
         if len(parts) == 6:
             ts, src, sport, dst, dport, proto = parts
+            ts = normalize_archive_timestamp(ts)
             rows.append((ts, src, sport, None, None, dst, dport, proto))
         elif len(parts) == 9:
             _id, ts, src, sport, dst, dport, proto, nat_ip, nat_port = parts
+            ts = normalize_archive_timestamp(ts)
             rows.append((ts, src, sport, nat_ip, nat_port, dst, dport, proto))
 
     return rows
@@ -128,12 +144,12 @@ def search_archive(
         )
 
     # I dump di ogni singola giornata sono cronologicamente
-    # ordinati e utilizzano timestamp ISO 8601.
-    # Nel percorso critico confrontiamo quindi direttamente
-    # le stringhe, evitando datetime.fromisoformat() per
+    # ordinati e i timestamp vengono normalizzati in ISO 8601 da
+    # parse_tuple_rows().  Nel percorso critico confrontiamo quindi
+    # direttamente le stringhe, evitando datetime.fromisoformat() per
     # milioni di record.
-    start_key = start_iso
-    end_key = end_iso
+    start_key = normalize_archive_timestamp(start_iso)
+    end_key = normalize_archive_timestamp(end_iso)
 
     if protocol:
         protocol = protocol.upper()
@@ -259,6 +275,7 @@ def search_archive(
         "results": results,
         "count": len(results),
         "truncated": truncated,
+        "matched": matched,
         "parsed_rows": parsed_rows,
         "rows_in_window": rows_in_window,
         "stopped_by_time": stopped_by_time,
@@ -269,50 +286,20 @@ def search_archive(
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--date", required=True)
+    parser.add_argument("archive_path")
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
-
     parser.add_argument("--source-ip")
     parser.add_argument("--source-port", type=int)
-
     parser.add_argument("--dest-ip")
     parser.add_argument("--dest-port", type=int)
-
-    parser.add_argument(
-        "--protocol",
-        choices=["TCP", "UDP"],
-    )
-
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=1000,
-    )
+    parser.add_argument("--protocol", choices=["TCP", "UDP"])
+    parser.add_argument("--limit", type=int, default=MAX_RESULTS)
 
     args = parser.parse_args()
 
-    archive = get_archive(args.date)
-
-    if not archive:
-        raise SystemExit(
-            f"Nessun archivio per {args.date}"
-        )
-
-    if archive["archive_status"] != "AVAILABLE":
-        raise SystemExit(
-            "Archivio non disponibile: "
-            f"{archive['archive_status']}"
-        )
-
-    if archive["schema_generation"] not in ("legacy", "nat-v1"):
-        raise SystemExit(
-            "Schema archivio non supportato: "
-            f"{archive['schema_generation']}"
-        )
-
     result = search_archive(
-        archive_path=archive["archive_path"],
+        archive_path=args.archive_path,
         start_iso=args.start,
         end_iso=args.end,
         source_ip=args.source_ip,
@@ -324,17 +311,20 @@ def main():
     )
 
     print()
-    print(f"Archivio:          {archive['table_name']}")
-    print(f"Record letti:      {result['parsed_rows']:,}")
-    print(f"Record finestra:   {result['rows_in_window']:,}")
-    print(f"Risultati:         {result['count']}")
-    print(f"Troncato:          {result['truncated']}")
-    print(f"Stop temporale:    {result['stopped_by_time']}")
-    print(f"Tempo:             {result['elapsed']:.3f} s")
-
+    print(f"Record letti:   {result['parsed_rows']:,}")
+    print(f"Record finestra: {result['rows_in_window']:,}")
+    print(f"Risultati:      {result['count']}")
+    print(f"Troncato:       {result['truncated']}")
+    print(f"Tempo:          {result['elapsed']:.3f} s")
     print()
 
     for row in result["results"][:20]:
+        nat = ""
+        if row["nat_source_ip"] is not None:
+            nat = (
+                f" NAT {row['nat_source_ip']}:"
+                f"{row['nat_source_port']}"
+            )
         print(
             row["timestamp"],
             row["source_ip"],
@@ -343,6 +333,7 @@ def main():
             row["dest_ip"],
             row["dest_port"],
             row["protocol"],
+            nat,
         )
 
     if result["count"] > 20:

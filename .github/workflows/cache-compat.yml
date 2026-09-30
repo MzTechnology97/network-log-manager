@@ -3,6 +3,8 @@ name: Archive cache compatibility
 on:
   pull_request:
     paths:
+      - 'app/archive_search.py'
+      - 'app/archive_cache.py'
       - 'app/archive_cache_search.py'
       - 'app/advanced_search.py'
       - 'app/export_search.py'
@@ -11,6 +13,8 @@ on:
   push:
     branches: [main]
     paths:
+      - 'app/archive_search.py'
+      - 'app/archive_cache.py'
       - 'app/archive_cache_search.py'
       - 'app/advanced_search.py'
       - 'app/export_search.py'
@@ -25,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Install unit-test dependency
+        run: python3 -m pip install --disable-pip-version-check 'PyMySQL==1.2.3'
       - name: Python syntax
         run: python3 -m compileall -q app tests
       - name: Cache compatibility tests

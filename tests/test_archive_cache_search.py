@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import archive_cache_search as cache_search
+from app.archive_search import parse_tuple_rows
 
 
 class FakeProcess:
@@ -29,26 +30,47 @@ class ArchiveCacheSearchTests(unittest.TestCase):
     def test_parse_legacy_row(self):
         row = cache_search.parse_cache_line(
             "2026-09-20T12:00:00.000+02:00\t"
-            "10.0.0.10\t12345\t1.1.1.1\t443\tTCP\n"
+            "192.0.2.10\t12345\t203.0.113.1\t443\tTCP\n"
         )
 
-        self.assertEqual(row["source_ip"], "10.0.0.10")
+        self.assertEqual(row["source_ip"], "192.0.2.10")
         self.assertEqual(row["source_port"], 12345)
         self.assertIsNone(row["nat_source_ip"])
         self.assertIsNone(row["nat_source_port"])
-        self.assertEqual(row["dest_ip"], "1.1.1.1")
+        self.assertEqual(row["dest_ip"], "203.0.113.1")
         self.assertEqual(row["dest_port"], 443)
 
     def test_parse_tsv_v2_row_preserves_nat(self):
         row = cache_search.parse_cache_line(
             "2026-09-20T12:00:00.000+02:00\t"
-            "10.0.0.10\t12345\t203.0.113.10\t54321\t"
-            "1.1.1.1\t443\tUDP\n"
+            "192.0.2.10\t12345\t198.51.100.10\t54321\t"
+            "203.0.113.1\t443\tUDP\n"
         )
 
-        self.assertEqual(row["nat_source_ip"], "203.0.113.10")
+        self.assertEqual(row["nat_source_ip"], "198.51.100.10")
         self.assertEqual(row["nat_source_port"], 54321)
         self.assertEqual(row["protocol"], "UDP")
+
+    def test_parse_existing_cache_normalizes_mariadb_datetime(self):
+        row = cache_search.parse_cache_line(
+            "2026-09-20 12:00:00.000\t"
+            "192.0.2.10\t12345\t198.51.100.10\t54321\t"
+            "203.0.113.1\t443\tTCP\n"
+        )
+
+        self.assertEqual(row["timestamp"], "2026-09-20T12:00:00.000")
+
+    def test_mysqldump_tuple_normalizes_mariadb_datetime(self):
+        rows = parse_tuple_rows(
+            "INSERT INTO `mikrotik_logs_2026_09_20` VALUES "
+            "(1,'2026-09-20 12:00:00.000','192.0.2.10',12345,"
+            "'203.0.113.1',443,'TCP','198.51.100.10',54321);"
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][0], "2026-09-20T12:00:00.000")
+        self.assertEqual(rows[0][3], "198.51.100.10")
+        self.assertEqual(rows[0][4], "54321")
 
     def test_search_cache_filters_nat_fields(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,12 +84,12 @@ class ArchiveCacheSearchTests(unittest.TestCase):
             (day / "1200.tsv.zst").touch()
 
             rows = (
-                "2026-09-20T12:01:00.000+02:00\t"
-                "10.0.0.10\t12345\t203.0.113.10\t54321\t"
-                "1.1.1.1\t443\tTCP\n"
-                "2026-09-20T12:02:00.000+02:00\t"
-                "10.0.0.11\t12346\t203.0.113.11\t54322\t"
-                "8.8.8.8\t53\tUDP\n"
+                "2026-09-20 12:01:00.000\t"
+                "192.0.2.10\t12345\t198.51.100.10\t54321\t"
+                "203.0.113.1\t443\tTCP\n"
+                "2026-09-20 12:02:00.000\t"
+                "192.0.2.11\t12346\t198.51.100.11\t54322\t"
+                "203.0.113.2\t53\tUDP\n"
             )
 
             with patch.object(cache_search, "CACHE_ROOT", root), patch.object(
@@ -79,15 +101,16 @@ class ArchiveCacheSearchTests(unittest.TestCase):
                     log_date="2026-09-20",
                     start_iso="2026-09-20T12:00:00.000",
                     end_iso="2026-09-20T12:14:59.999",
-                    nat_source_ip="203.0.113.10",
+                    nat_source_ip="198.51.100.10",
                     nat_source_port=54321,
                     limit=10,
                 )
 
         self.assertEqual(result["count"], 1)
+        self.assertEqual(result["rows_in_window"], 2)
         self.assertEqual(
             result["results"][0]["source_ip"],
-            "10.0.0.10",
+            "192.0.2.10",
         )
         self.assertEqual(
             result["results"][0]["nat_source_port"],
