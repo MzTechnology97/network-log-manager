@@ -30,7 +30,7 @@ def get_archives():
                     archive_status
                 FROM archive_catalog
                 WHERE archive_status = 'AVAILABLE'
-                  AND schema_generation = 'legacy'
+                  AND schema_generation IN ('legacy', 'nat-v1')
                 ORDER BY log_date ASC
                 """
             )

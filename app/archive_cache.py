@@ -10,14 +10,14 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from .archive_search import get_archive, parse_tuple_line, normalize_protocol
+from .archive_search import get_archive, parse_tuple_rows, normalize_protocol
 from .storage_registry import resolve_archive_source
 
 
 CACHE_ROOT = Path("/var/cache/netlog-manager/history")
 
-CACHE_VERSION = 2
-CACHE_FORMAT = "tsv-v1"
+CACHE_VERSION = 3
+CACHE_FORMAT = "tsv-v2"
 SEGMENT_MINUTES = 15
 PROGRESS_EVERY = 5_000_000
 
@@ -172,10 +172,10 @@ def build_cache(
             f"{archive['archive_status']}"
         )
 
-    if archive["schema_generation"] != "legacy":
+    if archive["schema_generation"] not in ("legacy", "nat-v1"):
         raise ArchiveCacheError(
-            "Questa versione supporta solamente "
-            "gli archivi legacy"
+            "Schema archivio non supportato: "
+            f"{archive['schema_generation']}"
         )
 
     catalog_path = Path(archive["archive_path"])
@@ -290,108 +290,108 @@ def build_cache(
         assert zstd_proc.stdout is not None
 
         for line in zstd_proc.stdout:
-            row = parse_tuple_line(line)
+            for row in parse_tuple_rows(line):
+                (
+                    timestamp,
+                    source_ip,
+                    source_port,
+                    nat_source_ip,
+                    nat_source_port,
+                    dest_ip,
+                    dest_port,
+                    protocol,
+                ) = row
 
-            if row is None:
-                continue
+                seg = segment_name(timestamp)
 
-            (
-                timestamp,
-                source_ip,
-                source_port,
-                dest_ip,
-                dest_port,
-                protocol,
-            ) = row
+                if seg != current_segment:
+                    if segment_input is not None:
+                        segment_input.close()
+                        segment_proc.wait()
 
-            seg = segment_name(timestamp)
+                        if segment_output is not None:
+                            segment_output.close()
+                            segment_output = None
 
-            if seg != current_segment:
-                if segment_input is not None:
-                    segment_input.close()
-                    segment_proc.wait()
+                        if segment_proc.returncode != 0:
+                            raise ArchiveCacheError(
+                                "Errore zstd segmento "
+                                f"{current_segment}"
+                            )
 
-                    if segment_output is not None:
-                        segment_output.close()
-                        segment_output = None
+                    output_path = (
+                        temp_dir /
+                        f"{seg}.tsv.zst"
+                    )
 
-                    if segment_proc.returncode != 0:
-                        raise ArchiveCacheError(
-                            "Errore zstd segmento "
-                            f"{current_segment}"
-                        )
+                    #
+                    # Durante il ritorno dall'ora legale
+                    # all'ora solare la stessa fascia 02:xx
+                    # compare due volte:
+                    #
+                    #   02:xx +02:00
+                    #   02:xx +01:00
+                    #
+                    # Se il segmento esiste già aggiungiamo
+                    # un nuovo frame Zstandard concatenato.
+                    #
+                    segment_output = output_path.open(
+                        "ab"
+                        if output_path.exists()
+                        else "wb"
+                    )
 
-                output_path = (
-                    temp_dir /
-                    f"{seg}.tsv.zst"
+                    segment_proc = subprocess.Popen(
+                        [
+                            "/usr/bin/zstd",
+                            "-q",
+                            "-T1",
+                            "-3",
+                            "-c",
+                        ],
+                        stdin=subprocess.PIPE,
+                        stdout=segment_output,
+                        text=True,
+                        encoding="utf-8",
+                    )
+
+                    segment_input = segment_proc.stdin
+                    current_segment = seg
+
+                    segment_rows.setdefault(
+                        seg,
+                        0,
+                    )
+
+                proto = normalize_protocol(
+                    protocol
                 )
 
-                #
-                # Durante il ritorno dall'ora legale
-                # all'ora solare la stessa fascia 02:xx
-                # compare due volte:
-                #
-                #   02:xx +02:00
-                #   02:xx +01:00
-                #
-                # Se il segmento esiste già aggiungiamo
-                # un nuovo frame Zstandard concatenato.
-                #
-                segment_output = output_path.open(
-                    "ab"
-                    if output_path.exists()
-                    else "wb"
+                segment_input.write(
+                    f"{timestamp}\t"
+                    f"{source_ip}\t"
+                    f"{source_port}\t"
+                    f"{nat_source_ip or ''}\t"
+                    f"{nat_source_port or ''}\t"
+                    f"{dest_ip}\t"
+                    f"{dest_port}\t"
+                    f"{proto}\n"
                 )
 
-                segment_proc = subprocess.Popen(
-                    [
-                        "/usr/bin/zstd",
-                        "-q",
-                        "-T1",
-                        "-3",
-                        "-c",
-                    ],
-                    stdin=subprocess.PIPE,
-                    stdout=segment_output,
-                    text=True,
-                    encoding="utf-8",
-                )
+                rows += 1
+                segment_rows[seg] += 1
 
-                segment_input = segment_proc.stdin
-                current_segment = seg
+                if rows % PROGRESS_EVERY == 0:
+                    elapsed = (
+                        time.monotonic()
+                        - started
+                    )
 
-                segment_rows.setdefault(
-                    seg,
-                    0,
-                )
-
-            proto = normalize_protocol(
-                protocol
-            )
-
-            segment_input.write(
-                f"{timestamp}\t"
-                f"{source_ip}\t"
-                f"{source_port}\t"
-                f"{dest_ip}\t"
-                f"{dest_port}\t"
-                f"{proto}\n"
-            )
-
-            rows += 1
-            segment_rows[seg] += 1
-
-            if rows % PROGRESS_EVERY == 0:
-                elapsed = (
-                    time.monotonic()
-                    - started
-                )
-
-                print(
-                    f"  {rows:,} record "
-                    f"({elapsed:.1f} s)",
-                    flush=True,
-                )
+                    print(
+                        f"  {rows:,} record "
+                        f"({elapsed:.1f} s)",
+                        flush=True,
+                    )
 
         if segment_input is not None:
             segment_input.close()
