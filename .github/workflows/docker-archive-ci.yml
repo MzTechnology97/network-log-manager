@@ -43,6 +43,10 @@ jobs:
           maint_pw="$(openssl rand -hex 24)"
           app_secret="$(openssl rand -hex 32)"
 
+          for value in "$root_pw" "$app_pw" "$reader_pw" "$ingest_pw" "$maint_pw" "$app_secret"; do
+            echo "::add-mask::$value"
+          done
+
           {
             echo "DB_ROOT_PASSWORD=$root_pw"
             echo "NETLOG_APP_PASSWORD=$app_pw"
@@ -104,17 +108,17 @@ jobs:
 
       - name: Start and provision MariaDB
         run: |
-          docker compose --env-file /var/lib/netlog-manager/docker/.env up -d db
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env up -d db
 
           for _ in $(seq 1 60); do
-            if docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+            if sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
               mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -B -e 'SELECT 1' >/dev/null 2>&1; then
               break
             fi
             sleep 2
           done
 
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
             mariadb -uroot "-p$DB_ROOT_PASSWORD" <<SQL
           CREATE DATABASE IF NOT EXISTS netlog_manager CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
           CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -130,29 +134,31 @@ jobs:
           SQL
 
           for migration in database/migrations/*.sql; do
-            docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+            sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
               mariadb -uroot "-p$DB_ROOT_PASSWORD" < "$migration"
           done
 
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
             mariadb -uroot "-p$DB_ROOT_PASSWORD" -e \
             "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; CALL syslogdb.CreateFutureTables();"
 
       - name: Start application container
         run: |
-          docker compose --env-file /var/lib/netlog-manager/docker/.env up -d --build app
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env up -d --build app
           for _ in $(seq 1 30); do
-            state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$(docker compose --env-file /var/lib/netlog-manager/docker/.env ps -q app)" 2>/dev/null || echo starting)"
+            app_id="$(sudo docker compose --env-file /var/lib/netlog-manager/docker/.env ps -q app)"
+            state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$app_id" 2>/dev/null || echo starting)"
             [[ "$state" == healthy ]] && break
             [[ "$state" == unhealthy ]] && exit 1
             sleep 2
           done
-          test "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose --env-file /var/lib/netlog-manager/docker/.env ps -q app)")" = healthy
+          app_id="$(sudo docker compose --env-file /var/lib/netlog-manager/docker/.env ps -q app)"
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$app_id")" = healthy
 
       - name: Create RFC5737 nat-v1 fixture table
         run: |
           today="$(TZ=Europe/Rome date '+%Y_%m_%d')"
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
             mariadb -uroot "-p$DB_ROOT_PASSWORD" syslogdb -e "
               CREATE TABLE mikrotik_logs_2024_01_01 LIKE mikrotik_logs_${today};
               INSERT INTO mikrotik_logs_2024_01_01
@@ -180,13 +186,13 @@ jobs:
             test "$(stat -c '%a' "$path")" = '640'
           done
 
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
             test -r /archive/mikrotik/2024/01/mikrotik_logs_2024_01_01.sql.zst
 
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
             python -m app.archive_catalog --write
 
-          catalog="$(docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+          catalog="$(sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
             mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -B netlog_manager -e \
             "SELECT CONCAT_WS('|',schema_generation,has_nat,archive_status,row_count) FROM archive_catalog WHERE log_date='2024-01-01';")"
 
@@ -195,10 +201,10 @@ jobs:
 
       - name: Build cache and search NAT fields
         run: |
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
             python -m app.archive_cache_worker --limit 1
 
-          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app python - <<'PY'
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app python - <<'PY'
           from app.archive_cache_search import search_cache
 
           result = search_cache(
@@ -221,10 +227,10 @@ jobs:
       - name: Diagnostics on failure
         if: failure()
         run: |
-          docker compose --env-file /var/lib/netlog-manager/docker/.env ps || true
-          docker compose --env-file /var/lib/netlog-manager/docker/.env logs --no-color --tail=200 || true
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env ps || true
+          sudo docker compose --env-file /var/lib/netlog-manager/docker/.env logs --no-color --tail=200 || true
           sudo find /tmp/netlog-archive -maxdepth 4 -printf '%M %u:%g %p\n' 2>/dev/null || true
 
       - name: Cleanup
         if: always()
-        run: docker compose --env-file /var/lib/netlog-manager/docker/.env down -v --remove-orphans || true
+        run: sudo docker compose --env-file /var/lib/netlog-manager/docker/.env down -v --remove-orphans || true
