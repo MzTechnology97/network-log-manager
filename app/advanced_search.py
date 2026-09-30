@@ -4,12 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from .database import app_db, syslog_db
-from .archive_cache import (
-    cache_is_valid,
-)
-from .archive_cache_search import (
-    search_cache,
-)
+from .archive_cache import cache_is_valid
+from .archive_cache_search import search_cache
 
 
 TABLE_RE = re.compile(
@@ -18,11 +14,7 @@ TABLE_RE = re.compile(
 
 MAX_RESULTS = 1000
 MAX_DAYS = 31
-
-ALLOWED_PROTOCOLS = {
-    "TCP",
-    "UDP",
-}
+ALLOWED_PROTOCOLS = {"TCP", "UDP"}
 
 
 class AdvancedSearchError(Exception):
@@ -71,8 +63,7 @@ def optional_port(value):
 
     if not 1 <= port <= 65535:
         raise AdvancedSearchError(
-            "Le porte devono essere comprese "
-            "tra 1 e 65535."
+            "Le porte devono essere comprese tra 1 e 65535."
         )
 
     return port
@@ -88,28 +79,21 @@ def optional_protocol(value):
         return None
 
     if value not in ALLOWED_PROTOCOLS:
-        raise AdvancedSearchError(
-            "Protocollo non valido."
-        )
+        raise AdvancedSearchError("Protocollo non valido.")
 
     return value
 
 
 def tables_for_range(start, end):
     if not isinstance(start, datetime):
-        raise AdvancedSearchError(
-            "Data iniziale non valida."
-        )
+        raise AdvancedSearchError("Data iniziale non valida.")
 
     if not isinstance(end, datetime):
-        raise AdvancedSearchError(
-            "Data finale non valida."
-        )
+        raise AdvancedSearchError("Data finale non valida.")
 
     if end < start:
         raise AdvancedSearchError(
-            "La data finale deve essere successiva "
-            "alla data iniziale."
+            "La data finale deve essere successiva alla data iniziale."
         )
 
     if end - start > timedelta(days=MAX_DAYS):
@@ -118,23 +102,16 @@ def tables_for_range(start, end):
         )
 
     tables = []
-
     day = start.date()
     last_day = end.date()
 
     while day <= last_day:
-        table = (
-            "mikrotik_logs_"
-            + day.strftime("%Y_%m_%d")
-        )
+        table = "mikrotik_logs_" + day.strftime("%Y_%m_%d")
 
         if not TABLE_RE.fullmatch(table):
-            raise AdvancedSearchError(
-                "Nome tabella non valido."
-            )
+            raise AdvancedSearchError("Nome tabella non valido.")
 
         tables.append((day, table))
-
         day += timedelta(days=1)
 
     return tables
@@ -144,9 +121,7 @@ def get_existing_tables(cur, table_names):
     if not table_names:
         return set()
 
-    placeholders = ",".join(
-        ["%s"] * len(table_names)
-    )
+    placeholders = ",".join(["%s"] * len(table_names))
 
     cur.execute(
         f"""
@@ -166,9 +141,7 @@ def get_existing_tables(cur, table_names):
 
 def get_table_columns(cur, table):
     if not TABLE_RE.fullmatch(table):
-        raise AdvancedSearchError(
-            "Nome tabella non valido."
-        )
+        raise AdvancedSearchError("Nome tabella non valido.")
 
     cur.execute(
         """
@@ -194,9 +167,7 @@ def get_archive_map(days):
 
     try:
         with conn.cursor() as cur:
-            placeholders = ",".join(
-                ["%s"] * len(days)
-            )
+            placeholders = ",".join(["%s"] * len(days))
 
             cur.execute(
                 f"""
@@ -215,32 +186,36 @@ def get_archive_map(days):
                 days,
             )
 
-            rows = cur.fetchall()
-
             return {
                 str(row["log_date"]): row
-                for row in rows
+                for row in cur.fetchall()
             }
-
     finally:
         conn.close()
 
 
+def archive_has_nat(archive):
+    value = archive.get("has_nat")
+
+    try:
+        if value is not None and int(value) == 1:
+            return True
+    except (TypeError, ValueError):
+        if str(value).strip().lower() in {
+            "true",
+            "yes",
+            "on",
+        }:
+            return True
+
+    return archive.get("schema_generation") == "nat-v1"
+
+
 def local_iso(dt):
-    """
-    Cache legacy:
-    YYYY-MM-DDTHH:MM:SS.mmm+HH:MM
-
-    La GUI lavora in ora locale senza offset.
-    archive_cache_search confronta stringhe ISO.
-
-    Aggiungiamo quindi un suffisso minimo/massimo
-    per includere qualsiasi offset della stessa
-    ora locale.
-    """
-    return dt.strftime(
-        "%Y-%m-%dT%H:%M:%S.%f"
-    )[:23]
+    # Cache segments are indexed by local wall-clock time.  The original
+    # timezone offset remains in each stored timestamp and is returned to the
+    # caller, but range selection intentionally uses the local component.
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:23]
 
 
 def archive_search_for_day(
@@ -259,11 +234,7 @@ def archive_search_for_day(
     remaining,
 ):
     log_date = day.isoformat()
-
-    archive_path = Path(
-        archive["archive_path"]
-    )
-
+    archive_path = Path(archive["archive_path"])
     expected_rows = archive["row_count"]
 
     if expected_rows is not None:
@@ -283,63 +254,42 @@ def archive_search_for_day(
             "rows": [],
         }
 
-    if nat_source_ip is not None:
-        return {
-            "status": "unsupported",
-            "missing": ["nat_source_ip"],
-            "rows": [],
-        }
+    if not archive_has_nat(archive):
+        missing = []
 
-    if nat_source_port is not None:
-        return {
-            "status": "unsupported",
-            "missing": ["nat_source_port"],
-            "rows": [],
-        }
+        if nat_source_ip is not None:
+            missing.append("nat_source_ip")
 
-    day_start = datetime.combine(
-        day,
-        datetime.min.time(),
-    )
+        if nat_source_port is not None:
+            missing.append("nat_source_port")
 
+        if missing:
+            return {
+                "status": "unsupported",
+                "missing": missing,
+                "rows": [],
+            }
+
+    day_start = datetime.combine(day, datetime.min.time())
     day_end = (
         day_start
         + timedelta(days=1)
         - timedelta(microseconds=1)
     )
 
-    query_start = max(
-        start,
-        day_start,
-    )
-
-    query_end = min(
-        end,
-        day_end,
-    )
-
-    start_local = local_iso(
-        query_start
-    )
-
-    end_local = local_iso(
-        query_end
-    )
-
-    #
-    # La cache viene interrogata direttamente usando
-    # l'ora locale. L'offset storico resta conservato
-    # nei record originali.
-    #
-    start_iso = start_local
-    end_iso = end_local
+    query_start = max(start, day_start)
+    query_end = min(end, day_end)
+    start_local = local_iso(query_start)
+    end_local = local_iso(query_end)
 
     cache_result = search_cache(
         log_date=log_date,
-        start_iso=start_iso,
-        end_iso=end_iso,
+        start_iso=start_local,
+        end_iso=end_local,
         source_ip=source_ip,
         source_port=source_port,
+        nat_source_ip=nat_source_ip,
+        nat_source_port=nat_source_port,
         dest_ip=dest_ip,
         dest_port=dest_port,
         protocol=protocol,
@@ -348,18 +298,9 @@ def archive_search_for_day(
 
     rows = []
 
-    for index, row in enumerate(
-        cache_result["results"]
-    ):
-        #
-        # Verifica finale sull'ora locale,
-        # indipendente dall'offset ISO.
-        #
+    for index, row in enumerate(cache_result["results"]):
         timestamp_raw = row["timestamp"]
-
-        timestamp_local = (
-            timestamp_raw[:23]
-        )
+        timestamp_local = timestamp_raw[:23]
 
         if timestamp_local < start_local:
             continue
@@ -373,8 +314,8 @@ def archive_search_for_day(
                 "timestamp": timestamp_raw,
                 "source_ip": row["source_ip"],
                 "source_port": row["source_port"],
-                "nat_source_ip": None,
-                "nat_source_port": None,
+                "nat_source_ip": row.get("nat_source_ip"),
+                "nat_source_port": row.get("nat_source_port"),
                 "dest_ip": row["dest_ip"],
                 "dest_port": row["dest_port"],
                 "protocol": row["protocol"],
@@ -404,18 +345,10 @@ def search_logs(
 ):
     source_ip = optional_ipv4(source_ip)
     source_port = optional_port(source_port)
-
-    nat_source_ip = optional_ipv4(
-        nat_source_ip
-    )
-
-    nat_source_port = optional_port(
-        nat_source_port
-    )
-
+    nat_source_ip = optional_ipv4(nat_source_ip)
+    nat_source_port = optional_port(nat_source_port)
     dest_ip = optional_ipv4(dest_ip)
     dest_port = optional_port(dest_port)
-
     protocol = optional_protocol(protocol)
 
     filters = {
@@ -436,78 +369,42 @@ def search_logs(
 
     if not active_filters:
         raise AdvancedSearchError(
-            "Specificare almeno un filtro oltre "
-            "all'intervallo temporale."
+            "Specificare almeno un filtro oltre all'intervallo temporale."
         )
 
-    requested_tables = tables_for_range(
-        start,
-        end,
-    )
-
-    table_names = [
-        table
-        for _, table in requested_tables
-    ]
-
+    requested_tables = tables_for_range(start, end)
+    table_names = [table for _, table in requested_tables]
     archive_map = get_archive_map(
-        [
-            day.isoformat()
-            for day, _ in requested_tables
-        ]
+        [day.isoformat() for day, _ in requested_tables]
     )
 
     conn = syslog_db()
 
     results = []
-
     searched_tables = []
     searched_archives = []
-
     skipped_tables = []
     unsupported_tables = []
     pending_archives = []
     missing_days = []
-
     globally_truncated = False
 
     try:
         with conn.cursor() as cur:
-            existing = get_existing_tables(
-                cur,
-                table_names,
-            )
+            existing = get_existing_tables(cur, table_names)
 
             for day, table in requested_tables:
-                remaining = (
-                    MAX_RESULTS
-                    + 1
-                    - len(results)
-                )
-
-                result_limit_reached = (
-                    remaining <= 0
-                )
+                remaining = MAX_RESULTS + 1 - len(results)
+                result_limit_reached = remaining <= 0
 
                 if result_limit_reached:
                     globally_truncated = True
 
-                #
-                # 1. MariaDB ha sempre precedenza.
-                #
+                # Online MariaDB data always has precedence over an archive.
                 if table in existing:
-                    columns = get_table_columns(
-                        cur,
-                        table,
-                    )
-
-                    required_columns = {
-                        key
-                        for key in active_filters
-                    }
-
+                    columns = get_table_columns(cur, table)
                     missing_filter_columns = (
-                        required_columns - columns
+                        set(active_filters) - columns
                     )
 
                     if missing_filter_columns:
@@ -525,36 +422,21 @@ def search_logs(
                     if result_limit_reached:
                         continue
 
-                    searched_tables.append(
-                        table
-                    )
+                    searched_tables.append(table)
 
                     day_start = datetime.combine(
                         day,
                         datetime.min.time(),
                     )
-
-                    day_end = (
-                        day_start
-                        + timedelta(days=1)
-                    )
-
-                    query_start = max(
-                        start,
-                        day_start,
-                    )
-
-                    query_end = min(
-                        end,
-                        day_end,
-                    )
+                    day_end = day_start + timedelta(days=1)
+                    query_start = max(start, day_start)
+                    query_end = min(end, day_end)
 
                     select_nat_ip = (
                         "nat_source_ip"
                         if "nat_source_ip" in columns
                         else "NULL AS nat_source_ip"
                     )
-
                     select_nat_port = (
                         "nat_source_port"
                         if "nat_source_port" in columns
@@ -577,33 +459,19 @@ def search_logs(
                           AND timestamp <= %s
                     """
 
-                    params = [
-                        query_start,
-                        query_end,
-                    ]
+                    params = [query_start, query_end]
 
-                    for field, value in (
-                        active_filters.items()
-                    ):
-                        sql += (
-                            f" AND `{field}`=%s"
-                        )
+                    for field, value in active_filters.items():
+                        sql += f" AND `{field}`=%s"
                         params.append(value)
 
                     sql += """
                         ORDER BY timestamp ASC, id ASC
                         LIMIT %s
                     """
+                    params.append(remaining)
 
-                    params.append(
-                        remaining
-                    )
-
-                    cur.execute(
-                        sql,
-                        params,
-                    )
-
+                    cur.execute(sql, params)
                     rows = cur.fetchall()
 
                     for row in rows:
@@ -616,49 +484,27 @@ def search_logs(
 
                     continue
 
-                #
-                # 2. Non online: cerchiamo nel catalogo.
-                #
-                archive = archive_map.get(
-                    day.isoformat()
-                )
+                archive = archive_map.get(day.isoformat())
 
                 if archive is None:
-                    skipped_tables.append(
-                        table
-                    )
-                    missing_days.append(
-                        day.isoformat()
-                    )
+                    skipped_tables.append(table)
+                    missing_days.append(day.isoformat())
                     continue
 
-                if (
-                    archive["archive_status"]
-                    != "AVAILABLE"
-                ):
+                if archive["archive_status"] != "AVAILABLE":
                     pending_archives.append(
                         {
                             "date": day.isoformat(),
                             "table": table,
                             "reason": (
                                 "archive_status="
-                                + str(
-                                    archive[
-                                        "archive_status"
-                                    ]
-                                )
+                                + str(archive["archive_status"])
                             ),
                         }
                     )
                     continue
 
                 if result_limit_reached:
-                    #
-                    # Il limite globale dei risultati è già
-                    # stato raggiunto. La giornata è però
-                    # classificata completamente prima di
-                    # saltare la lettura dei record.
-                    #
                     expected_rows = archive["row_count"]
 
                     if expected_rows is not None:
@@ -681,83 +527,65 @@ def search_logs(
                         )
                         continue
 
-                    missing = []
+                    if not archive_has_nat(archive):
+                        missing = []
 
-                    if nat_source_ip is not None:
-                        missing.append("nat_source_ip")
+                        if nat_source_ip is not None:
+                            missing.append("nat_source_ip")
 
-                    if nat_source_port is not None:
-                        missing.append("nat_source_port")
+                        if nat_source_port is not None:
+                            missing.append("nat_source_port")
 
-                    if missing:
-                        unsupported_tables.append(
-                            {
-                                "table": table,
-                                "missing": missing,
-                                "storage": "archive",
-                            }
-                        )
+                        if missing:
+                            unsupported_tables.append(
+                                {
+                                    "table": table,
+                                    "missing": missing,
+                                    "storage": "archive",
+                                }
+                            )
 
                     continue
 
-                archive_result = (
-                    archive_search_for_day(
-                        day=day,
-                        archive=archive,
-                        start=start,
-                        end=end,
-                        source_ip=source_ip,
-                        source_port=source_port,
-                        nat_source_ip=nat_source_ip,
-                        nat_source_port=nat_source_port,
-                        dest_ip=dest_ip,
-                        dest_port=dest_port,
-                        protocol=protocol,
-                        remaining=remaining,
-                    )
+                archive_result = archive_search_for_day(
+                    day=day,
+                    archive=archive,
+                    start=start,
+                    end=end,
+                    source_ip=source_ip,
+                    source_port=source_port,
+                    nat_source_ip=nat_source_ip,
+                    nat_source_port=nat_source_port,
+                    dest_ip=dest_ip,
+                    dest_port=dest_port,
+                    protocol=protocol,
+                    remaining=remaining,
                 )
 
-                if (
-                    archive_result["status"]
-                    == "pending"
-                ):
+                if archive_result["status"] == "pending":
                     pending_archives.append(
                         {
                             "date": day.isoformat(),
                             "table": table,
-                            "reason": archive_result[
-                                "reason"
-                            ],
+                            "reason": archive_result["reason"],
                         }
                     )
                     continue
 
-                if (
-                    archive_result["status"]
-                    == "unsupported"
-                ):
+                if archive_result["status"] == "unsupported":
                     unsupported_tables.append(
                         {
                             "table": table,
-                            "missing": archive_result[
-                                "missing"
-                            ],
+                            "missing": archive_result["missing"],
                             "storage": "archive",
                         }
                     )
                     continue
 
-                searched_archives.append(
-                    table
-                )
+                searched_archives.append(table)
+                results.extend(archive_result["rows"])
 
-                results.extend(
-                    archive_result["rows"]
-                )
-
-                if archive_result.get(
-                    "truncated"
-                ):
+                if archive_result.get("truncated"):
                     globally_truncated = True
 
                 if len(results) > MAX_RESULTS:
@@ -781,18 +609,13 @@ def search_logs(
             int(row.get("id") or 0),
         )
 
-    results.sort(
-        key=result_sort_key
-    )
+    results.sort(key=result_sort_key)
 
     if len(results) > MAX_RESULTS:
         globally_truncated = True
         results = results[:MAX_RESULTS]
 
-    searched_all = (
-        searched_tables
-        + searched_archives
-    )
+    searched_all = searched_tables + searched_archives
 
     return {
         "results": results,
@@ -801,13 +624,9 @@ def search_logs(
         "filters": active_filters,
         "start": start,
         "end": end,
-
-        # Compatibilità con GUI esistente.
         "searched_tables": searched_all,
         "skipped_tables": skipped_tables,
         "unsupported_tables": unsupported_tables,
-
-        # Informazioni nuove.
         "searched_online_tables": searched_tables,
         "searched_archives": searched_archives,
         "pending_archives": pending_archives,
