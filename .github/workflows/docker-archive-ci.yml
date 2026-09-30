@@ -1,0 +1,230 @@
+name: Docker archive lifecycle
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/archive-docker.sh'
+      - 'app/archive_catalog.py'
+      - 'app/archive_cache.py'
+      - 'app/archive_cache_worker.py'
+      - 'app/archive_cache_search.py'
+      - 'compose.yml'
+      - 'Dockerfile'
+      - '.github/workflows/docker-archive-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/archive-docker.sh'
+      - 'app/archive_catalog.py'
+      - 'app/archive_cache.py'
+      - 'app/archive_cache_worker.py'
+      - 'app/archive_cache_search.py'
+      - 'compose.yml'
+      - 'Dockerfile'
+      - '.github/workflows/docker-archive-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  archive-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare synthetic Docker configuration
+        run: |
+          root_pw="$(openssl rand -hex 24)"
+          app_pw="$(openssl rand -hex 24)"
+          reader_pw="$(openssl rand -hex 24)"
+          ingest_pw="$(openssl rand -hex 24)"
+          maint_pw="$(openssl rand -hex 24)"
+          app_secret="$(openssl rand -hex 32)"
+
+          {
+            echo "DB_ROOT_PASSWORD=$root_pw"
+            echo "NETLOG_APP_PASSWORD=$app_pw"
+            echo "NETLOG_READER_PASSWORD=$reader_pw"
+            echo "NETLOG_INGEST_PASSWORD=$ingest_pw"
+            echo "NETLOG_MAINT_PASSWORD=$maint_pw"
+            echo "SECRET_KEY=$app_secret"
+            echo 'ARCHIVE_ROOT=/tmp/netlog-archive'
+            echo 'SYSLOG_PORT=5514'
+            echo 'TZ=Europe/Rome'
+            echo 'HOSTNAME_FQDN=netlog-manager.local'
+            echo 'TLS_DIR=/tmp/netlog-tls'
+            echo 'OPS_ROOT=/tmp/netlog-ops'
+          } >> "$GITHUB_ENV"
+
+          sudo install -d -o 10001 -g 999 -m 0750 /tmp/netlog-archive
+          sudo install -d -m 0750 /etc/netlog-manager /var/lib/netlog-manager/docker /tmp/netlog-tls /tmp/netlog-ops
+
+          sudo tee /etc/netlog-manager/install.env >/dev/null <<'EOF'
+          MODE=docker
+          HOSTNAME_FQDN=netlog-manager.local
+          SYSLOG_PORT=5514
+          TZ=Europe/Rome
+          ARCHIVE_ROOT=/tmp/netlog-archive
+          EOF
+
+          printf '%s\n' \
+            "DB_ROOT_PASSWORD=$root_pw" \
+            "NETLOG_APP_PASSWORD=$app_pw" \
+            "NETLOG_READER_PASSWORD=$reader_pw" \
+            "NETLOG_INGEST_PASSWORD=$ingest_pw" \
+            "NETLOG_MAINT_PASSWORD=$maint_pw" \
+            "SECRET_KEY=$app_secret" \
+            | sudo tee /etc/netlog-manager/secrets.env >/dev/null
+
+          sudo tee /var/lib/netlog-manager/install.env >/dev/null <<EOF
+          MODE=docker
+          REPO_ROOT=$GITHUB_WORKSPACE
+          UPDATE_CHANNEL=development
+          AUTO_UPDATE=0
+          EOF
+
+          printf '%s\n' \
+            "DB_ROOT_PASSWORD=$root_pw" \
+            "NETLOG_APP_PASSWORD=$app_pw" \
+            "NETLOG_READER_PASSWORD=$reader_pw" \
+            "NETLOG_INGEST_PASSWORD=$ingest_pw" \
+            "NETLOG_MAINT_PASSWORD=$maint_pw" \
+            "SECRET_KEY=$app_secret" \
+            'SYSLOG_PORT=5514' \
+            'ARCHIVE_ROOT=/tmp/netlog-archive' \
+            'TZ=Europe/Rome' \
+            'HOSTNAME_FQDN=netlog-manager.local' \
+            'TLS_DIR=/tmp/netlog-tls' \
+            'OPS_ROOT=/tmp/netlog-ops' \
+            | sudo tee /var/lib/netlog-manager/docker/.env >/dev/null
+
+          sudo chmod 0600 /etc/netlog-manager/install.env /etc/netlog-manager/secrets.env /var/lib/netlog-manager/install.env /var/lib/netlog-manager/docker/.env
+
+      - name: Start and provision MariaDB
+        run: |
+          docker compose --env-file /var/lib/netlog-manager/docker/.env up -d db
+
+          for _ in $(seq 1 60); do
+            if docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+              mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -B -e 'SELECT 1' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+            mariadb -uroot "-p$DB_ROOT_PASSWORD" <<SQL
+          CREATE DATABASE IF NOT EXISTS netlog_manager CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE DATABASE IF NOT EXISTS syslogdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+          CREATE USER IF NOT EXISTS 'netlog_app'@'%' IDENTIFIED BY '$NETLOG_APP_PASSWORD';
+          CREATE USER IF NOT EXISTS 'netlog_reader'@'%' IDENTIFIED BY '$NETLOG_READER_PASSWORD';
+          CREATE USER IF NOT EXISTS 'netlog_ingest'@'%' IDENTIFIED BY '$NETLOG_INGEST_PASSWORD';
+          CREATE USER IF NOT EXISTS 'netlog_maintenance'@'%' IDENTIFIED BY '$NETLOG_MAINT_PASSWORD';
+          GRANT SELECT,INSERT,UPDATE,DELETE ON netlog_manager.* TO 'netlog_app'@'%';
+          GRANT SELECT ON syslogdb.* TO 'netlog_reader'@'%';
+          GRANT INSERT ON syslogdb.* TO 'netlog_ingest'@'%';
+          GRANT CREATE,EVENT ON syslogdb.* TO 'netlog_maintenance'@'%';
+          FLUSH PRIVILEGES;
+          SQL
+
+          for migration in database/migrations/*.sql; do
+            docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+              mariadb -uroot "-p$DB_ROOT_PASSWORD" < "$migration"
+          done
+
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+            mariadb -uroot "-p$DB_ROOT_PASSWORD" -e \
+            "GRANT EXECUTE ON PROCEDURE syslogdb.CreateFutureTables TO 'netlog_maintenance'@'%'; CALL syslogdb.CreateFutureTables();"
+
+      - name: Start application container
+        run: |
+          docker compose --env-file /var/lib/netlog-manager/docker/.env up -d --build app
+          for _ in $(seq 1 30); do
+            state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}starting{{end}}' "$(docker compose --env-file /var/lib/netlog-manager/docker/.env ps -q app)" 2>/dev/null || echo starting)"
+            [[ "$state" == healthy ]] && break
+            [[ "$state" == unhealthy ]] && exit 1
+            sleep 2
+          done
+          test "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose --env-file /var/lib/netlog-manager/docker/.env ps -q app)")" = healthy
+
+      - name: Create RFC5737 nat-v1 fixture table
+        run: |
+          today="$(TZ=Europe/Rome date '+%Y_%m_%d')"
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+            mariadb -uroot "-p$DB_ROOT_PASSWORD" syslogdb -e "
+              CREATE TABLE mikrotik_logs_2024_01_01 LIKE mikrotik_logs_${today};
+              INSERT INTO mikrotik_logs_2024_01_01
+                (timestamp,source_ip,source_port,nat_source_ip,nat_source_port,dest_ip,dest_port,protocol)
+              VALUES
+                ('2024-01-01 12:00:00.000','192.0.2.10',40000,'198.51.100.20',50000,'203.0.113.30',443,'TCP');
+            "
+
+      - name: Archive fixture
+        run: sudo bash ./scripts/archive-docker.sh --limit 1
+
+      - name: Verify archive permissions and catalog
+        run: |
+          dir=/tmp/netlog-archive/2024/01
+          archive="$dir/mikrotik_logs_2024_01_01.sql.zst"
+          meta="$dir/mikrotik_logs_2024_01_01.meta"
+          sha="$archive.sha256"
+
+          test -f "$archive"
+          test "$(stat -c '%u' "$dir")" = '10001'
+          test "$(stat -c '%a' "$dir")" = '750'
+
+          for path in "$archive" "$meta" "$sha"; do
+            test "$(stat -c '%u' "$path")" = '10001'
+            test "$(stat -c '%a' "$path")" = '640'
+          done
+
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
+            test -r /archive/mikrotik/2024/01/mikrotik_logs_2024_01_01.sql.zst
+
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
+            python -m app.archive_catalog --write
+
+          catalog="$(docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T db \
+            mariadb -uroot "-p$DB_ROOT_PASSWORD" -N -B netlog_manager -e \
+            "SELECT CONCAT_WS('|',schema_generation,has_nat,archive_status,row_count) FROM archive_catalog WHERE log_date='2024-01-01';")"
+
+          echo "Catalog: $catalog"
+          test "$catalog" = 'nat-v1|1|AVAILABLE|1'
+
+      - name: Build cache and search NAT fields
+        run: |
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app \
+            python -m app.archive_cache_worker --limit 1
+
+          docker compose --env-file /var/lib/netlog-manager/docker/.env exec -T app python - <<'PY'
+          from app.archive_cache_search import search_cache
+
+          result = search_cache(
+              log_date='2024-01-01',
+              start_iso='2024-01-01T11:59:00.000',
+              end_iso='2024-01-01T12:01:00.000',
+              nat_source_ip='198.51.100.20',
+              nat_source_port=50000,
+              limit=10,
+          )
+
+          assert result['count'] == 1, result
+          row = result['results'][0]
+          assert row['source_ip'] == '192.0.2.10', row
+          assert row['dest_ip'] == '203.0.113.30', row
+          assert row['nat_source_ip'] == '198.51.100.20', row
+          assert row['nat_source_port'] == 50000, row
+          PY
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          docker compose --env-file /var/lib/netlog-manager/docker/.env ps || true
+          docker compose --env-file /var/lib/netlog-manager/docker/.env logs --no-color --tail=200 || true
+          sudo find /tmp/netlog-archive -maxdepth 4 -printf '%M %u:%g %p\n' 2>/dev/null || true
+
+      - name: Cleanup
+        if: always()
+        run: docker compose --env-file /var/lib/netlog-manager/docker/.env down -v --remove-orphans || true
