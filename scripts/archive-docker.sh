@@ -14,6 +14,11 @@ ENV_FILE="$STATE_DIR/docker/.env"
 DB=syslogdb
 LIMIT=10
 DRY_RUN=0
+# Keep bind-mounted archives traversable/readable by the non-root application
+# containers.  The Docker image intentionally runs the app as UID 10001; GID
+# 999 matches the archive-root ownership prepared by install-docker.sh.
+ARCHIVE_UID=10001
+ARCHIVE_GID=999
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=1
 [[ "${1:-}" == "--all" ]] && LIMIT=0
 if [[ "${1:-}" == "--limit" ]]; then [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || die "Invalid --limit"; LIMIT="$2"; fi
@@ -36,7 +41,7 @@ for table in "${tables[@]}"; do
   y="${BASH_REMATCH[1]}"; m="${BASH_REMATCH[2]}"; d="${BASH_REMATCH[3]}"
   dir="$ARCHIVE_ROOT/$y/$m"; final="$dir/$table.sql.zst"; tmp="$dir/.$table.sql.zst.tmp"
   meta="$dir/$table.meta"; sha="$dir/$table.sql.zst.sha256"
-  install -d -m 0750 "$dir"
+  install -d -o "$ARCHIVE_UID" -g "$ARCHIVE_GID" -m 0750 "$dir"
   [[ ! -e "$final" ]] || { log "Archive exists, keeping DB table: $table"; continue; }
   rows="$(db -N -B "$DB" -e "SELECT COUNT(*) FROM \`$table\`;")"
   log "Archiving $table ($rows rows)"
@@ -60,6 +65,8 @@ ARCHIVED_AT=$(date --iso-8601=seconds)
 RETENTION_POLICY=archive_after_${archive_after_days}_days
 EOF
   printf '%s  %s\n' "$hash" "$(basename "$final")" >"$sha"
+  chown "$ARCHIVE_UID:$ARCHIVE_GID" "$final" "$meta" "$sha"
+  chmod 0640 "$final" "$meta" "$sha"
   (cd "$dir" && sha256sum -c "$(basename "$sha")" >/dev/null)
   # If a GUI-configured remote storage is active and verified, copy all
   # archive artifacts before the source DB table can be dropped.
