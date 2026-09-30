@@ -1,0 +1,119 @@
+name: Native CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  native-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare synthetic native configuration
+        run: |
+          sudo install -d -m 0750 /etc/netlog-manager /var/lib/netlog-manager /var/backups/netlog-manager /tmp/netlog-native-archive
+
+          sudo tee /etc/netlog-manager/install.env >/dev/null <<'EOF'
+          MODE=native
+          HOSTNAME_FQDN=netlog-manager.local
+          SYSLOG_PORT=5514
+          TZ=Europe/Rome
+          ARCHIVE_ROOT=/tmp/netlog-native-archive
+          EOF
+
+          app_pw="$(openssl rand -hex 24)"
+          reader_pw="$(openssl rand -hex 24)"
+          ingest_pw="$(openssl rand -hex 24)"
+          maint_pw="$(openssl rand -hex 24)"
+          app_secret="$(openssl rand -hex 32)"
+
+          printf '%s\n' \
+            'DB_ROOT_PASSWORD=' \
+            "NETLOG_APP_PASSWORD=$app_pw" \
+            "NETLOG_READER_PASSWORD=$reader_pw" \
+            "NETLOG_INGEST_PASSWORD=$ingest_pw" \
+            "NETLOG_MAINT_PASSWORD=$maint_pw" \
+            "SECRET_KEY=$app_secret" \
+            | sudo tee /etc/netlog-manager/secrets.env >/dev/null
+
+          sudo tee /var/lib/netlog-manager/install.env >/dev/null <<EOF
+          MODE=native
+          REPO_ROOT=$GITHUB_WORKSPACE
+          UPDATE_CHANNEL=development
+          AUTO_UPDATE=0
+          EOF
+
+          sudo chmod 0600 /etc/netlog-manager/install.env /etc/netlog-manager/secrets.env /var/lib/netlog-manager/install.env
+
+      - name: Install native stack
+        run: |
+          admin_pw="$(openssl rand -base64 24 | tr -d '\n')"
+          printf '%s\n' 'ci-admin' 'CI Administrator' '' "$admin_pw" "$admin_pw" \
+            | sudo bash ./scripts/install-native.sh
+
+      - name: Native health check
+        run: sudo /opt/netlog-manager/scripts/healthcheck.sh
+
+      - name: Native service state
+        run: |
+          for unit in mariadb syslog-ng apache2 netlog-manager netlog-monitor netlog-archive-cache netlog-export-worker netlog-export-cleanup netlog-native-ops-agent; do
+            sudo systemctl is-active --quiet "$unit" || {
+              sudo systemctl status "$unit" --no-pager || true
+              exit 1
+            }
+          done
+
+      - name: Synthetic NAT syslog ingestion
+        run: |
+          log_date="$(TZ=Europe/Rome date '+%Y_%m_%d')"
+          timestamp="$(TZ=Europe/Rome date '+%Y-%m-%dT%H:%M:%S%:z')"
+
+          python3 - "$timestamp" <<'PY'
+          import socket
+          import sys
+
+          timestamp = sys.argv[1]
+          payload = (
+              f"<134>{timestamp} router-ci firewall,info connection-state:new,snat "
+              "srcnat: in:bridge out:ether1, connection-state:new,snat proto TCP, "
+              "192.0.2.10:40000->203.0.113.30:443, "
+              "NAT (192.0.2.10:40000->198.51.100.20:50000)->203.0.113.30:443\n"
+          ).encode()
+
+          sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+          sock.sendto(payload, ("127.0.0.1", 5514))
+          sock.close()
+          PY
+
+          table="mikrotik_logs_${log_date}"
+          row=""
+
+          for _ in $(seq 1 30); do
+            row="$(sudo mariadb -N -B syslogdb -e "SELECT CONCAT_WS('|',source_ip,source_port,nat_source_ip,nat_source_port,dest_ip,dest_port,protocol) FROM ${table} WHERE source_ip='192.0.2.10' ORDER BY id DESC LIMIT 1;" 2>/dev/null || true)"
+            [[ -n "$row" ]] && break
+            sleep 1
+          done
+
+          echo "Synthetic row: ${row:-missing}"
+          test "$row" = '192.0.2.10|40000|198.51.100.20|50000|203.0.113.30|443|TCP'
+
+      - name: Native HTTPS proxy
+        run: |
+          curl -kfsS --resolve netlog-manager.local:443:127.0.0.1 --max-time 10 https://netlog-manager.local/ >/dev/null
+
+      - name: Native diagnostics on failure
+        if: failure()
+        run: |
+          sudo systemctl --failed --no-pager || true
+          sudo journalctl -u netlog-manager --no-pager -n 100 || true
+          sudo journalctl -u syslog-ng --no-pager -n 100 || true
+          sudo journalctl -u netlog-archive-cache --no-pager -n 100 || true
+          sudo journalctl -u netlog-export-worker --no-pager -n 100 || true
+          sudo journalctl -u netlog-native-ops-agent --no-pager -n 100 || true
